@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   build:
-    if: ${{ github.repository == 'imaging-formats/bffile' }}
+    #if: ${{ github.repository == 'scifio/scyfio' }}
+    if: ${{ github.repository == 'DISABLED_WORKFLOW' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

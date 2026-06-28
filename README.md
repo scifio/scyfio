@@ -1,10 +1,10 @@
 # scyfio
 
-[![License](https://img.shields.io/pypi/l/scyfio.svg?color=green)](https://github.com/imaging-formats/scyfio/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/scyfio.svg?color=green)](https://github.com/scifio/scyfio/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/scyfio.svg?color=green)](https://pypi.org/project/scyfio)
 [![Python Version](https://img.shields.io/pypi/pyversions/scyfio.svg?color=green)](https://python.org)
-[![CI](https://github.com/imaging-formats/scyfio/actions/workflows/ci.yml/badge.svg)](https://github.com/imaging-formats/scyfio/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/imaging-formats/scyfio/branch/main/graph/badge.svg)](https://codecov.io/gh/imaging-formats/scyfio)
+[![CI](https://github.com/scifio/scyfio/actions/workflows/ci.yml/badge.svg)](https://github.com/scifio/scyfio/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/scifio/scyfio/branch/main/graph/badge.svg)](https://codecov.io/gh/scifio/scyfio)
 
 Modern SCIFIO-based scientific image reader for Python
 
@@ -13,7 +13,7 @@ formats natively and reaches Bio-Formats's full format coverage through
 [`scifio-bf-compat`](https://github.com/scifio/scifio-bf-compat), which adapts
 every Bio-Formats reader into a SCIFIO format.
 
-Fork of [bffile](https://github.com/tlambert03/bffile).
+Fork of [bffile](https://github.com/imaging-formats/bffile).
 
 ## Status
 

@@ -1,9 +1,9 @@
 [project]
 site_name = "scyfio"
 site_description = "Modern, lazy SCIFIO-based image reader for Python."
-site_url = "http://imaging-formats.github.io/scyfio/"
-repo_name = "imaging-formats/scyfio"
-repo_url = "https://github.com/imaging-formats/scyfio"
+site_url = "http://scifio.github.io/scyfio/"
+repo_name = "scifio/scyfio"
+repo_url = "https://github.com/scifio/scyfio"
 copyright = ""
 
 nav = [

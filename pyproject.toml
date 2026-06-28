@@ -39,8 +39,8 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/imaging-formats/scyfio"
-repository = "https://github.com/imaging-formats/scyfio"
+homepage = "https://github.com/scifio/scyfio"
+repository = "https://github.com/scifio/scyfio"
 
 [project.optional-dependencies]
 dask = ["dask[array]>=2024.11.0"]
