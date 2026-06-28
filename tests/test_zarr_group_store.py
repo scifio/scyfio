@@ -1,4 +1,4 @@
-"""Tests for BioFormatsGroupStore - multi-series/multi-resolution zarr groups."""
+"""Tests for the multi-series/multi-resolution OME-Zarr group store."""
 
 from __future__ import annotations
 

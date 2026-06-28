@@ -26,7 +26,6 @@ jobs:
     name: >-
       Test ${{ matrix.os }} py${{ matrix.python-version }}
         java${{ matrix.java-version }}
-        ${{ matrix.bioformats-version && format('bf{0}', matrix.bioformats-version) || '' }}
         ${{ matrix.resolution != 'highest' && matrix.resolution || '' }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -35,7 +34,6 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest, macos-latest, windows-latest]
         java-version: ["11"]
-        bioformats-version: [""]
         resolution: ["highest"]
         group: [test-all] # this means install all third party deps.  The other includes do not.
         exclude:
@@ -50,15 +48,6 @@ jobs:
           - os: ubuntu-latest
             python-version: "3.14"
             java-version: "21"
-          # bioformats-versions
-          - os: ubuntu-latest
-            python-version: "3.10"
-            java-version: "11"
-            bioformats-version: "6.0.1"
-          - os: ubuntu-latest
-            python-version: "3.12"
-            java-version: "11"
-            bioformats-version: "7.3.1"
           # lowest-resolution variants
           - os: ubuntu-latest
             python-version: "3.11"
@@ -109,13 +98,12 @@ jobs:
         run: uv run --no-sync coverage run -p -m pytest -v -p no:faulthandler
         env:
           BFF_JAVA_VERSION: ${{ matrix.java-version }}
-          BIOFORMATS_VERSION: ${{matrix.bioformats-version}}
           PYTEST_ADDOPTS: ${{ matrix.resolution == 'lowest-direct' && '-W ignore' || '' }}
 
       - name: Upload coverage
         uses: actions/upload-artifact@v6
         with:
-          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.bioformats-version }}-${{ matrix.java-version }}-${{ matrix.resolution }}-${{ matrix.group}}
+          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.java-version }}-${{ matrix.resolution }}-${{ matrix.group}}
           path: ./.coverage*
           include-hidden-files: true
 

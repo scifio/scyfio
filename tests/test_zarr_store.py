@@ -1,4 +1,4 @@
-"""Test zarr v3 store backed by Bio-Formats."""
+"""Test zarr v3 store backed by SCIFIO."""
 
 from __future__ import annotations
 

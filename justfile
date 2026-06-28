@@ -3,7 +3,7 @@
 
 # build java stubs into ./typings
 build-stubs:
-    uv run scripts/stubgen.py 'ome:formats-gpl:RELEASE' --prefix loci --prefix ome --prefix java
+    uv run scripts/stubgen.py 'io.scif:scifio-bf-compat:4.1.1' 'ome:formats-gpl:6.10.1' --prefix io.scif --prefix loci --prefix ome --prefix java
 
 # run tests quickly with coverage
 test *ARGS:
@@ -14,6 +14,9 @@ test *ARGS:
 check:
     uv run prek -a --hook-stage=manual
 
-# clone bioformats repository
-clone-bioformats:
-    git clone https://github.com/ome/bioformats
+# clone the SCIFIO repositories (for understanding the underlying Java code)
+clone-scifio:
+    git clone https://github.com/scifio/scifio
+    git clone https://github.com/scifio/scifio-bf-compat
+    git clone https://github.com/scifio/scifio-ome-xml
+    git clone https://github.com/scifio/scifio-tutorials

@@ -1,4 +1,4 @@
-"""Read-only zarr v3 store backed by Bio-Formats."""
+"""Read-only zarr v3 store backed by SCIFIO."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class BFArrayStore(ReadOnlyStore):
-    """Read-only zarr v3 store that virtualizes a Bio-Formats series/resolution.
+    """Read-only zarr v3 store that virtualizes a SCIFIO series/resolution.
 
     Parameters
     ----------

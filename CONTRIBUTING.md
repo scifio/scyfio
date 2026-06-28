@@ -41,8 +41,9 @@ uv run pytest --no-jgo-cache
 
 A goal of scyfio is for the entire java setup and dependency management to be
 fully automatic and transparent to users. It should "just work" on any system
-with Python and pip, without requiring users to have Java or Bio-Formats already
-installed, or to manually configure classpaths or environment variables.
+with Python and pip, without requiring users to have Java or any of the Java
+libraries already installed, or to manually configure classpaths or environment
+variables.
 
 There is some very useful (but deep) java magic going on under the hood here,
 which is worth understanding:
@@ -63,20 +64,21 @@ the following happens:
    <https://github.com/scijava/scyjava?tab=readme-ov-file#bootstrap-a-java-installation>
 
 3. **Dependency Resolution**: Next, `jgo.resolve_dependencies()` takes Maven
-   coordinates (e.g., `ome:formats-gpl:RELEASE`) that have been specified using
+   coordinates (e.g., `io.scif:scifio-bf-compat` and `ome:formats-gpl`) that have
+   been specified using
    `scyjava.config.endpoints`, generates a temporary POM file, runs `mvn
    dependency:resolve` to download all JARs to `~/.m2/repository`, then links
    them into a jgo cache directory (`~/.jgo`) based on a hash of the
    coordinates.
 
 4. **JVM Launch**: JPype starts the JVM with all resolved JARs on the classpath,
-   making Bio-Formats classes available to Python.
+   making the SCIFIO (and Bio-Formats) classes available to Python.
 
 This happens automatically on first import, with subsequent imports reusing
 cached JDK and JARs for fast startup.
 
 ## Using Claude
 
-If (like me) you don't have a *ton* of familiarity with the Bio-Formats java codebase,
+If (like me) you don't have a *ton* of familiarity with the SCIFIO java codebase,
 it can be helpful to use an LLM to navigate the code. The `CLAUDE.md` file explains
-to Claude how to clone the bioformats repo into a local dir and where to find key files.
+to Claude where to find the SCIFIO repos locally and where to find key files.

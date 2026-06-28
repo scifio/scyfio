@@ -5,9 +5,10 @@ title: Get started
 
 # Getting started with `scyfio`
 
-`scyfio` is a **modern Bio-Formats wrapper for Python**.
+`scyfio` is a **modern SCIFIO-based image reader for Python**.
 
-It exposes the full power of Bio-Formats in a clean Pythonic API
+It wraps the [SCIFIO](https://scif.io) Java library — which reaches Bio-Formats'
+full format coverage through `scifio-bf-compat` — in a clean Pythonic API
 backed by lazy data access.
 
 ### Features

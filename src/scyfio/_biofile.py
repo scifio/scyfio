@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ReaderInfo:
-    """Information about a Bio-Formats reader class.
+    """Information about a SCIFIO format.
 
     Attributes
     ----------
@@ -61,24 +61,24 @@ class ReaderInfo:
     is_gpl: bool
 
 
-# Java byte array size limit: 2^31 - 8 (leaves room for array header)
-# Bio-Formats will fail with "Array size too large" if we exceed this.
-# Key insight: This is a HARD limit in Java - can't be increased without JVM changes.
-# Solution: Automatic tiling when reading >2GB planes (transparent to users)
+# Java byte array size limit: 2^31 - 8 (leaves room for array header). A read that
+# returns a single byte[] larger than this fails with "Array size too large". This is
+# a HARD limit in the JVM, independent of the reader; we work around it by tiling reads
+# of >2GB planes (transparent to users).
 MAX_JAVA_ARRAY_SIZE: int = 2**31 - 8
-if _max_bytes := os.getenv("BIOFORMATS_MAX_JAVA_BYTES"):  # pragma: no cover
+if _max_bytes := os.getenv("SCYFIO_MAX_JAVA_BYTES"):  # pragma: no cover
     try:
         MAX_JAVA_ARRAY_SIZE = int(_max_bytes)
     except ValueError:
         warnings.warn(
-            f"Invalid BIOFORMATS_MAX_JAVA_BYTES: {_max_bytes!r}. "
+            f"Invalid SCYFIO_MAX_JAVA_BYTES: {_max_bytes!r}. "
             f"Using default {MAX_JAVA_ARRAY_SIZE}",
             stacklevel=2,
         )
 
 
 class BioFile(Sequence[Series]):
-    """Read image and metadata from file supported by Bioformats.
+    """Read image and metadata from a file supported by SCIFIO.
 
     BioFile instances must be explicitly opened before use, either by:
 
@@ -562,11 +562,11 @@ class BioFile(Sequence[Series]):
         chunks: str | tuple = "auto",
         tile_size: tuple[int, int] | str | None = None,
     ) -> dask.array.Array:
-        """Create dask array for lazy computation on Bio-Formats data.
+        """Create dask array for lazy computation on the image data.
 
         Returns a dask array in TCZYX[r] order that wraps a
         [`LazyBioArray`][scyfio.LazyBioArray]. Uses single-threaded scheduler
-        for Bio-Formats thread safety.
+        for reader thread safety.
 
         Parameters
         ----------
@@ -584,7 +584,7 @@ class BioFile(Sequence[Series]):
         tile_size : tuple[int, int] or "auto", optional
             Tile-based chunking for Y,X dimensions (T,C,Z get chunks of 1).
             - (512, 512): Use 512x512 tiles
-            - "auto": Query Bio-Formats optimal tile size
+            - "auto": Query SCIFIO optimal tile size
             Mutually exclusive with chunks.
 
         Returns
@@ -769,7 +769,7 @@ class BioFile(Sequence[Series]):
                 colormap = cmap.Colormap(lut / lut.max())  # Normalize to [0, 1]
         ``
         """
-        # `is_indexed` is a bit of a misnomer here (but bioformats uses it)
+        # `is_indexed` is a bit of a misnomer here (but the underlying API uses it)
         # it really means "a LUT exists", not "the image is palette-based"
         #   - True palette images (GIF, indexed PNG) → is_indexed=True, is_rgb=False
         #   - Fluorescence with display LUT (ND2, CZI) → is_indexed=True, is_rgb=False
@@ -809,9 +809,9 @@ class BioFile(Sequence[Series]):
         resolution: int = 0,
         buffer: np.ndarray | None = None,
     ) -> np.ndarray:
-        """Read a single plane or sub-region directly from Bio-Formats.
+        """Read a single plane or sub-region directly from the reader.
 
-        Low-level method wrapping Bio-Formats' `openBytes()` API. Provides
+        Low-level method wrapping SCIFIO's `openPlane()` API. Provides
         fine-grained control for reading specific planes or rectangular
         sub-regions. Most users should use `as_array()` or `to_dask()` instead.
 
@@ -1054,7 +1054,7 @@ class BioFile(Sequence[Series]):
             Maximum thumbnail size. If int, limits both width and height to this value.
             If tuple, interpreted as ``(max_width, max_height)``.
         max_read_size : int, optional
-            Maximum dimension size to read directly from Bio-Formats before switching.
+            Maximum dimension size to read directly from the reader before switching.
             If this is lower than the size of the full plane, the image will be cropped.
             Decrease for speed, increase for field of view.
 
@@ -1251,7 +1251,7 @@ class BioFile(Sequence[Series]):
     def _calculate_tile_height(self, meta: CoreMetadata, region_width: int) -> int:
         """Calculate max rows per tile respecting Java array limit and heap space.
 
-        Uses full-width rows (no X tiling) to minimize openBytes() calls.
+        Uses full-width rows (no X tiling) to minimize openPlane() calls.
         """
         row_bytes = region_width * meta.dtype.itemsize * meta.shape.rgb
 

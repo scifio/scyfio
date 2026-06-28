@@ -1,4 +1,4 @@
-"""Yet another Bio-Formats wrapper for Python."""
+"""A SCIFIO-based scientific image reader for Python."""
 
 from importlib.metadata import PackageNotFoundError, version
 

@@ -1,4 +1,4 @@
-"""Lightweight proxy representing a single series in a Bio-Formats file."""
+"""Lightweight proxy representing a single series in a SCIFIO-read file."""
 
 from __future__ import annotations
 

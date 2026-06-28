@@ -1,4 +1,4 @@
-"""Benchmark comparing Bio-Formats file reopen strategies.
+"""Benchmark comparing scyfio file reopen strategies.
 
 Compares three approaches:
 1. Keep file open (baseline) — no close/reopen overhead

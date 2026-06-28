@@ -113,9 +113,9 @@ stateDiagram-v2
 | Transition | What happens |
 | --- | --- |
 | [`__init__()`][scyfio.BioFile] | Creates the `BioFile` object but does not open the file or initialize the reader. |
-| [`open()`][scyfio.BioFile.open] (first call) | Full initialization — format detection, header parsing (`setId` in Java). Slow. |
-| [`close()`][scyfio.BioFile.close] | Releases the OS file handle but keeps all parsed state in memory. |
-| [`open()`][scyfio.BioFile.open] (after `close()`) | Just reopens the file handle (`reopenFile` in Java). Fast. |
+| [`open()`][scyfio.BioFile.open] (first call) | Full initialization — format detection, header parsing (`initializeReader` in SCIFIO). Slow. |
+| [`close()`][scyfio.BioFile.close] | Releases the OS file handle but keeps all parsed metadata in memory. |
+| [`open()`][scyfio.BioFile.open] (after `close()`) | Re-acquires the source by re-initializing the reader (SCIFIO readers cannot reopen after a file-only close). |
 | [`destroy()`][scyfio.BioFile.destroy] / [`__exit__()`][scyfio.BioFile.__exit__] | Full teardown — Java reader and all cached state released. |
 
 `close()` is lightweight: metadata (via `core_metadata()`, `len()`,
@@ -130,7 +130,7 @@ read more data later.
 
 ## The Series Data Model
 
-Bio-Formats models files as a sequence of __series__ (e.g., wells in a plate,
+`scyfio` models files as a sequence of __series__ (e.g., wells in a plate,
 fields of view, tiles in a mosaic, etc...). Each series is a 5D dataset with shape
 `(T, C, Z, Y, X)`, and may have multiple __resolution__ levels (pyramid
 layers).
@@ -148,8 +148,8 @@ layers).
 
 ### `scyfio` is Stateless
 
-If you're familiar with the Bio-Formats Java API, you will be used
-to using `setSeries` to change the active series before following
+If you're familiar with the SCIFIO or Bio-Formats Java API, you will be used
+to changing the active series/image (e.g. `setSeries`) before following
 up with calls to read data or metadata.
 
 `scyfio.BioFile` aims for a __stateless__ API: all methods that pertain to
@@ -345,7 +345,7 @@ Groups follow the [`bioformats2raw.layout` transitional
 spec](https://ngff.openmicroscopy.org/specifications/0.5/index.html#bioformats2raw-layout-transitional)
 
 !!! warning "It's not 'free'"
-    While viewing any bioformats-supported file as an OME-Zarr without conversion is
+    While viewing any supported file as an OME-Zarr without conversion is
     a powerful feature: you should _not_ assume that you will get the anywhere near
     same performance as a native OME-Zarr directory store. Performance will depend
     entirely on the native file structure, and many will not be as optimized for
@@ -395,7 +395,7 @@ You can also use tile-based chunking for very large planes:
 ```python
 with BioFile("image.nd2") as bf:
     darr = bf.to_dask(tile_size=(512, 512))       # explicit tile size
-    darr = bf.to_dask(tile_size="auto")           # query Bio-Formats for optimal size
+    darr = bf.to_dask(tile_size="auto")           # query SCIFIO for optimal size
 ```
 
 !!! note "Dask is optional"
@@ -455,7 +455,7 @@ with BioFile("image.nd2") as bf:
 
 ## Reader Discovery
 
-You can query Bio-Formats for supported formats without opening a file:
+You can query SCIFIO for supported formats without opening a file:
 
 ```python
 from scyfio import BioFile

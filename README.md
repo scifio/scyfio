@@ -6,7 +6,12 @@
 [![CI](https://github.com/imaging-formats/scyfio/actions/workflows/ci.yml/badge.svg)](https://github.com/imaging-formats/scyfio/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/imaging-formats/scyfio/branch/main/graph/badge.svg)](https://codecov.io/gh/imaging-formats/scyfio)
 
-Modern Bio-Formats wrapper for python
+Modern SCIFIO-based scientific image reader for Python
+
+`scyfio` wraps the [SCIFIO](https://scif.io) Java library. SCIFIO reads many
+formats natively and reaches Bio-Formats' full format coverage through
+[`scifio-bf-compat`](https://github.com/scifio/scifio-bf-compat), which adapts
+every Bio-Formats reader into a SCIFIO format.
 
 ### Documentation 📖
 
@@ -57,44 +62,39 @@ data = imread("image.nd2", series=0, resolution=0)
 print(data.shape, data.dtype)  # (T, C, Z, Y, X) array
 ```
 
-### Selecting Bio-Formats Version
+### Selecting Java library versions
 
-Bio-Formats is downloaded at runtime (via [jgo](https://pypi.org/project/jgo/)).
+The Java libraries are downloaded at runtime (via [jgo](https://pypi.org/project/jgo/)).
+By default scyfio loads two coordinates plus a logging backend:
 
-By default, it will download the latest `ome:formats-gpl:RELEASE` maven artifact.
-You can specify a different version by setting the `BIOFORMATS_VERSION` environment variable:
+- `io.scif:scifio-bf-compat` — SCIFIO and its Bio-Formats compatibility layer
+- `ome:formats-gpl` — the actual Bio-Formats readers
 
-This variable accepts either a simple version string (e.g. `6.0.1`) or a full maven coordinate
-(e.g. `ome:formats-gpl:6.0.1` or `ome:formats-bsd:7.3.1`):
+You can override either with an environment variable. Each accepts a simple
+version string (e.g. `6.10.1`) or a full maven coordinate:
 
 ```bash
-# Use Bio-Formats 6.0.1 (GPL-licensed)
-export BIOFORMATS_VERSION="6.0.1"
+# Override the SCIFIO / scifio-bf-compat version
+export SCIFIO_VERSION="io.scif:scifio-bf-compat:4.1.1"
 
-# Use BSD-licensed Bio-Formats 7.3.1
-export BIOFORMATS_VERSION="ome:formats-bsd:7.3.1"
+# Override the Bio-Formats readers version
+export BIOFORMATS_VERSION="6.10.1"
 ```
 
-To see the currently installed version of Bio-Formats, you can check the
-`BioFile.bioformats_version` static method:
+> [!IMPORTANT]
+> `scifio-bf-compat` is built against a specific Bio-Formats API version, so the
+> `BIOFORMATS_VERSION` you choose must stay API-compatible with it. Mismatched
+> versions can fail at runtime (e.g. `NoSuchFieldError`). When in doubt, leave the
+> defaults alone.
+
+To see the loaded SCIFIO version and the maven coordinate that was used:
 
 ```python
 from scyfio import BioFile
 
-print(BioFile.bioformats_version())  # e.g. "8.1.1"
+print(BioFile.scifio_version())      # e.g. "0.39.1"
+print(BioFile.maven_coordinate())    # e.g. "io.scif:scifio-bf-compat:4.1.1"
 ```
-
-and to see the full maven coordinate that was used:
-
-```python
-from scyfio import BioFile
-
-print(BioFile.bioformats_maven_coordinate())  # e.g. "ome:formats-gpl:8.1.1"
-```
-
-> [!NOTE]
-> We test back to version 6.0.1, but older versions may also work.  If you specifically need
-> this code to work with an older version of bioformats, please open an issue.
 
 ### Java Runtime
 
@@ -123,7 +123,7 @@ Available vendors: `zulu-jre`, `zulu`, `adoptium`, `temurin`, and
 
 #### Java 8 Support
 
-Bffile is *not* currently expected to work with Java 8, as `jpype` has
+scyfio is *not* currently expected to work with Java 8, as `jpype` has
 deprecated support for Java 8 as of `jpype` version 1.6. If you do want to try
 with Java 8, you will minimally need to explicitly pin `jpype<1.6`.  If this is
 an important use case for you, please open an issue to discuss Java 8 support.
@@ -141,20 +141,24 @@ Licensing is a bit complicated for this project, so please read carefully.
 
 When you run scyfio for the first time, it will automatically download a number
 of Java jars (via [`jgo`](https://pypi.org/project/jgo/)), each of which has its
-own license.  By default, scyfio downloads the
-[`ome:formats-gpl:RELEASE`](https://mvnrepository.com/artifact/ome/formats-gpl)
-maven artifact.
+own license. SCIFIO and its compatibility layer
+([`io.scif:scifio-bf-compat`](https://github.com/scifio/scifio-bf-compat)) are
+BSD-licensed, but by default scyfio also downloads the
+[`ome:formats-gpl`](https://mvnrepository.com/artifact/ome/formats-gpl) Bio-Formats
+readers.
 
 - `ome:formats-gpl` is licensed under the [GPLv2+
   License](./LICENSE/LICENSE_FORMATS_GPL)
 
 If you would like to use scyfio without any GPL-licensed jars, you can instead
-opt into using
-[`ome:formats-bsd`](https://mvnrepository.com/artifact/ome/formats-bsd) by
-setting the `BIOFORMATS_VERSION` environment variable:
+opt into the BSD-licensed
+[`ome:formats-bsd`](https://mvnrepository.com/artifact/ome/formats-bsd) readers by
+setting the `BIOFORMATS_VERSION` environment variable. Use a version that is
+API-compatible with the bundled `scifio-bf-compat` (matching the default
+`ome:formats-gpl` version):
 
 ```
-BIOFORMATS_VERSION="ome:formats-bsd"
+BIOFORMATS_VERSION="ome:formats-bsd:6.10.1"
 ```
 
 - `ome:formats-bsd` is licensed under the [BSD-2-Clause

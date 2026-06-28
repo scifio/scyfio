@@ -36,8 +36,9 @@ def _assert_open(bf: BioFile) -> None:
 def _assert_suspended(bf: BioFile) -> None:
     """Assert BioFile is SUSPENDED: file handles closed, but reads still work.
 
-    With the new behavior, Bio-Formats automatically reopens file handles when
-    needed, so reads work even when suspended. Metadata is preserved.
+    A read on a suspended file transparently re-acquires the source (scyfio
+    re-initializes the SCIFIO reader), so reads work even when suspended. Metadata
+    is preserved throughout.
     """
     assert bf.closed
     assert bf.suspended

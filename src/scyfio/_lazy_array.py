@@ -1,4 +1,4 @@
-"""Lazy numpy-compatible array for on-demand Bio-Formats reading."""
+"""Lazy numpy-compatible array for on-demand image reading."""
 
 from __future__ import annotations
 
@@ -26,12 +26,12 @@ ShapeTCZYXS: TypeAlias = tuple[int, int, int, int, int, int]
 
 
 class LazyBioArray:
-    """Pythonic lazy array interface for a single Bio-Formats Series/Resolution.
+    """Pythonic lazy array interface for a single image Series/Resolution.
 
     This object provides a numpy-compatible API for on-demand access to a
-    specific series and resolution level in a Bio-Formats file. In the
-    Bio-Formats Java API, each file can contain multiple series (e.g., wells
-    in a plate, fields of view, or tiled regions), and each series can have
+    specific series and resolution level in a SCIFIO-read file. A single file
+    can contain multiple series (e.g., wells in a plate, fields of view, or
+    tiled regions), and each series can have
     multiple resolution levels (pyramid layers). LazyBioArray represents one
     of these series/resolution combinations as a numpy-style array.
 
@@ -219,10 +219,10 @@ class LazyBioArray:
         chunks: str | tuple = "auto",
         tile_size: tuple[int, int] | str | None = None,
     ) -> dask.array.Array:
-        """Create dask array for lazy computation on Bio-Formats data.
+        """Create dask array for lazy computation on the image data.
 
         Returns a dask array in TCZYX[r] order that wraps this lazy array.
-        Uses single-threaded scheduler for Bio-Formats thread safety.
+        Uses single-threaded scheduler for reader thread safety.
 
         Parameters
         ----------
@@ -235,7 +235,7 @@ class LazyBioArray:
         tile_size : tuple[int, int] or "auto", optional
             Tile-based chunking for Y,X dimensions (T,C,Z get chunks of 1).
             - (512, 512): Use 512x512 tiles
-            - "auto": Query Bio-Formats optimal tile size
+            - "auto": Query SCIFIO optimal tile size
             Mutually exclusive with chunks.
         """
         try:
@@ -580,7 +580,7 @@ class LazyBioArray:
         selection: tuple[range, range, range, slice, slice, slice],
         squeezed: SqueezedTCZYXS,
     ) -> None:
-        """Fill output array by reading planes from Bio-Formats.
+        """Fill output array by reading planes from the reader.
 
         Parameters
         ----------

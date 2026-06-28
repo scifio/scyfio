@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def imread(path: str | Path, *, series: int = 0, resolution: int = 0) -> np.ndarray:
-    """Read image data from a Bio-Formats-supported file into a numpy array.
+    """Read image data from a SCIFIO-supported file into a numpy array.
 
     Convenience function that opens a file, reads the specified series into
     memory, and returns it as a numpy array. For more control over reading
@@ -62,7 +62,7 @@ def open_zarr_array(
     resolution: int = 0,
     rgb_as_channels: bool = False,
 ) -> zarr.Array:
-    """Read image data from a Bio-Formats-supported file as a zarr array.
+    """Read image data from a SCIFIO-supported file as a zarr array.
 
     By default, returns arrays with the same shape as `imread()`:
     - RGB images: `(T, C, Z, Y, X, rgb)`
@@ -115,7 +115,7 @@ def open_zarr_array(
 def open_ome_zarr_group(
     path: str | Path, *, version: Literal["0.5"] = "0.5"
 ) -> zarr.Group:
-    """Read image data from a Bio-Formats-supported file as a zarr array or group.
+    """Read image data from a SCIFIO-supported file as a zarr array or group.
 
     Returns an OME `zarr.Group` following the
     [bf2raw](https://ngff.openmicroscopy.org/0.5/index.html#bf2raw) transitional

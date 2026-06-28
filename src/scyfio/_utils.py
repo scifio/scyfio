@@ -33,7 +33,7 @@ class OMEShape(NamedTuple):
 
 
 class CoreMeta(NamedTuple):
-    """NamedTuple with core bioformats metadata. (not OME meta)."""
+    """NamedTuple with core image metadata (not OME meta)."""
 
     shape: OMEShape
     dtype: np.dtype

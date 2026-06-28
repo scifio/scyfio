@@ -1,4 +1,4 @@
-"""Read-only zarr v3 group store backed by Bio-Formats."""
+"""Read-only zarr v3 group store backed by SCIFIO."""
 
 from __future__ import annotations
 
@@ -88,9 +88,9 @@ _OME_TO_NGFF_LENGTH: dict[UnitsLength, str] = {
 
 
 class BFOmeZarrStore(ReadOnlyStore):
-    """Read-only zarr v3 group store for complete Bio-Formats file hierarchy.
+    """Read-only zarr v3 group store for a complete SCIFIO file hierarchy.
 
-    Virtualizes an entire Bio-Formats file as an OME-ZARR group containing
+    Virtualizes an entire file as an OME-ZARR group containing
     all series and resolution levels, following NGFF v0.5 specification.
 
     Directory structure:
@@ -181,9 +181,9 @@ class BFOmeZarrStore(ReadOnlyStore):
         ----
         RGB images are currently represented as 6D arrays (TCZYXS) which is not
         strictly NGFF v0.5 compliant (spec recommends 5D with expanded C dimension).
-        A future enhancement would wrap the Bio-Formats reader with ChannelSeparator
-        to automatically split RGB into separate C channels, matching bioformats2raw
-        behavior. For now, RGB images are accessible but may not be fully compliant
+        A future enhancement would split RGB into separate C channels automatically,
+        matching the bioformats2raw layout. For now, RGB images are accessible but may
+        not be fully compliant
         with all NGFF tools.
         """
         meta = self._biofile.core_metadata(series=series)
@@ -305,8 +305,8 @@ class BFOmeZarrStore(ReadOnlyStore):
     def _get_array_store(self, series: int, resolution: int) -> BFArrayStore:
         """Get or create cached array store for a series/resolution.
 
-        Uses integrated BioFormatsStore with RGB expansion and dimension
-        squeezing flags. Much simpler than wrapping!
+        Uses the integrated BFArrayStore with RGB expansion and dimension
+        squeezing flags.
         """
         key = (series, resolution)
         if key not in self._array_stores:

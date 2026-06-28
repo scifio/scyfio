@@ -111,6 +111,10 @@ ENV/
 .idea/
 tests/data/
 uv.lock
-# ignore cloned bioformats repo (if used for development)
+# ignore cloned SCIFIO / bioformats repos (if used for development)
 bioformats/
+scifio/
+scifio-bf-compat/
+scifio-ome-xml/
+scifio-tutorials/
 *.ome.zarr

@@ -120,8 +120,8 @@ def test_filename_property(simple_file: Path) -> None:
     assert str(simple_file) == bf.filename
 
 
-def test_bioformats_version() -> None:
-    version = BioFile.bioformats_version()
+def test_scifio_version() -> None:
+    version = BioFile.scifio_version()
     assert isinstance(version, str)
     assert len(version) > 0
     parts = version.split(".")
