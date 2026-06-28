@@ -15,14 +15,14 @@ every Bio-Formats reader into a SCIFIO format.
 
 Fork of [bffile](https://github.com/tlambert03/bffile).
 
-### Documentation 📖
+## Status
 
-<https://imaging-formats.github.io/scyfio/>
+**EXPERIMENTAL PROTOTYPE** - Do not use in production yet.
 
 ## Installation
 
 ```bash
-pip install scyfio
+pip install git+https://github.com/scifio/scyfio.git
 ```
 
 ## Usage
