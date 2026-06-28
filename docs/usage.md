@@ -476,7 +476,7 @@ for reader in BioFile.list_available_readers():
 | <div style="width: 130px;">Variable</div> | Description | <div style="width: 170px;">Default</div> |
 | -------- | ----------- | ------- |
 | `SCIFIO_VERSION` | scifio-bf-compat version or full Maven coordinate | `"io.scif:scifio-bf-compat:4.1.1"` |
-| `FORMATS_VERSION` | Bio-Formats readers version or full Maven coordinate (e.g. `"6.10.1"` or `"ome:formats-gpl:6.10.1"`) | `"ome:formats-gpl:6.10.1"` |
+| `BIOFORMATS_VERSION` | Bio-Formats readers version or full Maven coordinate (e.g. `"6.10.1"` or `"ome:formats-gpl:6.10.1"`) | `"ome:formats-gpl:6.10.1"` |
 | `BFF_JAVA_VERSION` | Java version to use (e.g. `11`, `17`, `21`) | `11` |
 | `BFF_JAVA_VENDOR` | Java vendor (e.g. `zulu-jre`, `temurin`, `adoptium`) | `zulu-jre` |
 | `BFF_JAVA_FETCH` | Java fetch behavior: `always`, `never`, or `auto` (See [scyjava docs](https://github.com/scijava/scyjava?tab=readme-ov-file#bootstrap-a-java-installation)). | `always` |

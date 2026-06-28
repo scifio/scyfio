@@ -62,15 +62,15 @@ def _resolve_coordinate(value: str, default: str) -> str:
     return value
 
 
-# SCIFIO_VERSION overrides the scifio-bf-compat coordinate; FORMATS_VERSION overrides
-# the Bio-Formats readers. BIOFORMATS_VERSION is kept as a deprecated alias for the
-# latter so existing configuration keeps working.
+# SCIFIO_VERSION overrides the scifio-bf-compat coordinate; BIOFORMATS_VERSION
+# overrides the Bio-Formats readers (formats-gpl) coordinate. Each accepts either a
+# bare version (e.g. "6.10.1") or a full Maven coordinate.
 if _coord := os.getenv("SCIFIO_VERSION", ""):
     SCIFIO_BF_COMPAT_COORDINATE = _resolve_coordinate(
         _coord, SCIFIO_BF_COMPAT_COORDINATE
     )
     MAVEN_COORDINATE = SCIFIO_BF_COMPAT_COORDINATE
-if _coord := (os.getenv("FORMATS_VERSION") or os.getenv("BIOFORMATS_VERSION") or ""):
+if _coord := os.getenv("BIOFORMATS_VERSION", ""):
     FORMATS_GPL_COORDINATE = _resolve_coordinate(_coord, FORMATS_GPL_COORDINATE)
 
 scyjava.config.endpoints.append(SCIFIO_BF_COMPAT_COORDINATE)
