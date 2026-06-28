@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-from bffile import BioFile
+from scyfio import BioFile
 
 
 def benchmark_keep_open(path: Path, n_reads: int = 20) -> float:
@@ -43,14 +43,13 @@ def benchmark_suspend_resume(path: Path, n_cycles: int = 20) -> float:
 
 
 def benchmark_full_reopen(path: Path, n_cycles: int = 10) -> float:
-    """Full close + Memoizer reopen between reads."""
-    # First open to ensure memo file exists
-    with BioFile(path, memoize=1) as bf:
+    """Full destroy + fresh re-initialization between reads."""
+    with BioFile(path) as bf:
         bf.read_plane()
 
     t0 = time.perf_counter()
     for _ in range(n_cycles):
-        with BioFile(path, memoize=1) as bf:
+        with BioFile(path) as bf:
             meta = bf.core_metadata()
             shape = meta.shape
             bf.read_plane(t=0, c=0, z=min(1, shape.z - 1))

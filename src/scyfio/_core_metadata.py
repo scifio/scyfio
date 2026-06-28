@@ -37,8 +37,8 @@ class OMEShape(NamedTuple):
 
 
 def pixtype2dtype(pixeltype: int, little_endian: bool) -> np.dtype:
-    """Convert a loci.formats PixelType integer into a numpy dtype."""
-    FormatTools = jimport("loci.formats.FormatTools")
+    """Convert a SCIFIO pixel type integer into a numpy dtype."""
+    FormatTools = jimport("io.scif.util.FormatTools")
 
     fmt2type: dict[int, str] = {
         FormatTools.INT8: "i1",
@@ -49,7 +49,6 @@ def pixtype2dtype(pixeltype: int, little_endian: bool) -> np.dtype:
         FormatTools.UINT32: "u4",
         FormatTools.FLOAT: "f4",
         FormatTools.DOUBLE: "f8",
-        FormatTools.BIT: "b1",
     }
     return np.dtype(("<" if little_endian else ">") + fmt2type[pixeltype])
 
@@ -122,4 +121,70 @@ class CoreMetadata:
             is_thumbnail_series=meta.thumbnail,
             series_metadata=dict(meta.seriesMetadata),
             resolution_count=meta.resolutionCount,
+        )
+
+    @classmethod
+    def from_image_metadata(cls, imeta: Any) -> Self:
+        """Build CoreMetadata from a native SCIFIO ``io.scif.ImageMetadata``.
+
+        Used for formats served by SCIFIO's own readers (rather than the Bio-Formats
+        compatibility layer). SCIFIO describes images with a flexible list of
+        ``net.imagej.axis`` axes split into "planar" axes (which define the physical
+        plane, e.g. X, Y, and any interleaved colour samples) and "non-planar" axes
+        (which enumerate planes, e.g. Z, Channel, Time). We collapse that model down to
+        the fixed ``(T, C, Z, Y, X[, rgb])`` shape the rest of scyfio expects.
+        """
+        Axes = jimport("net.imagej.axis.Axes")
+
+        def axis_len(axis_type: Any, default: int) -> int:
+            if imeta.getAxisIndex(axis_type) < 0:
+                return default
+            return int(imeta.getAxisLength(axis_type))
+
+        x = axis_len(Axes.X, 1)
+        y = axis_len(Axes.Y, 1)
+        z = axis_len(Axes.Z, 1)
+        t = axis_len(Axes.TIME, 1)
+
+        # rgb = product of planar axis lengths other than X and Y (the colour samples
+        # packed into each plane, e.g. interleaved RGB).
+        planar_count = imeta.getPlanarAxisCount()
+        rgb_count = 1
+        for d in range(planar_count):
+            axis_type = imeta.getAxis(d).type()
+            if axis_type != Axes.X and axis_type != Axes.Y:
+                rgb_count *= int(imeta.getAxisLength(axis_type))
+        rgb_count = max(rgb_count, 1)
+
+        # effective channel count: total planes divided by the Z*T planes, mirroring
+        # Bio-Formats' notion of "effective sizeC" (handles extra channel-like axes).
+        plane_count = int(imeta.getPlaneCount())
+        size_zt = z * t
+        eff_size_c = (plane_count // size_zt) if size_zt else 1
+        eff_size_c = max(eff_size_c, 1)
+
+        # dimension order string, e.g. "XYCZT", from the axis list
+        order = "".join(
+            str(imeta.getAxis(d).type().getLabel())[:1].upper()
+            for d in range(imeta.getAxes().size())
+        )
+
+        return cls(
+            dtype=pixtype2dtype(imeta.getPixelType(), imeta.isLittleEndian()),
+            shape=OMEShape(x=x, y=y, z=z, c=eff_size_c, t=t, rgb=rgb_count),
+            rgb_count=rgb_count,
+            thumb_size_x=int(imeta.getThumbSizeX()),
+            thumb_size_y=int(imeta.getThumbSizeY()),
+            bits_per_pixel=int(imeta.getBitsPerPixel()),
+            image_count=plane_count,
+            dimension_order=order,
+            is_order_certain=bool(imeta.isOrderCertain()),
+            is_rgb=rgb_count > 1,
+            is_little_endian=bool(imeta.isLittleEndian()),
+            is_interleaved=imeta.getInterleavedAxisCount() > 0,
+            is_indexed=bool(imeta.isIndexed()),
+            is_false_color=bool(imeta.isFalseColor()),
+            is_metadata_complete=bool(imeta.isMetadataComplete()),
+            is_thumbnail_series=bool(imeta.isThumbnail()),
+            resolution_count=1,
         )

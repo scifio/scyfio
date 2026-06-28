@@ -3,7 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("bffile")
+    __version__ = version("scyfio")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "uninstalled"
 

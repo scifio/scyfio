@@ -2,15 +2,15 @@
 # /// script
 # requires-python = ">=3.10, <3.14"
 # dependencies = [
-#     "bffile[dask]",
+#     "scyfio[dask]",
 #     "napari[pyqt6]",
 # ]
 #
 # [tool.uv.sources]
-# bffile = { path = "../" }
+# scyfio = { path = "../" }
 # ///
 """
-View microscopy files using bffile and napari.
+View microscopy files using scyfio and napari.
 
 Usage:
     uv run scripts/napari_view.py <path_to_file> [options]
@@ -29,14 +29,14 @@ from pathlib import Path
 
 import napari  # pyright: ignore[reportMissingImports]
 
-from bffile import BioFile, imread
-from bffile._utils import physical_pixel_sizes  # don't use, not public
+from scyfio import BioFile, imread
+from scyfio._utils import physical_pixel_sizes  # don't use, not public
 
 
 def main() -> None:
-    """Open a microscopy file with bffile and display it with napari.imshow()."""
+    """Open a microscopy file with scyfio and display it with napari.imshow()."""
     parser = argparse.ArgumentParser(
-        description="View files using bffile and napari",
+        description="View files using scyfio and napari",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("file_path", type=Path, help="File to open")
@@ -93,7 +93,7 @@ def main() -> None:
         napari.run()
 
     else:
-        # Open the file with bffile
+        # Open the file with scyfio
         bf = BioFile(args.file_path).open()
         meta = bf.core_metadata(series=args.series)
         method = bf.to_dask if args.dask else bf.as_array

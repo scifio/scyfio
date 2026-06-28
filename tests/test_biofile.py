@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from bffile import BioFile, imread
+from scyfio import BioFile, imread
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,21 +83,12 @@ def test_core_meta_returns_metadata(opened_biofile: BioFile) -> None:
     assert isinstance(meta.dtype, np.dtype)
 
 
-@pytest.mark.parametrize(
-    ("channel_filler", "expect_rgb", "expect_indexed"),
-    [(None, 3, False), (True, 3, False), (False, 1, True)],
-    ids=["auto", "forced", "disabled"],
-)
-def test_channel_filler_gif(
-    data_dir: Path,
-    channel_filler: bool | None,
-    expect_rgb: int,
-    expect_indexed: bool,
-) -> None:
-    with BioFile(data_dir / "example.gif", channel_filler=channel_filler) as bf:
+def test_indexed_gif(data_dir: Path) -> None:
+    # SCIFIO reads indexed GIF data natively (as indexed, not expanded to RGB).
+    with BioFile(data_dir / "example.gif") as bf:
         meta = bf.core_metadata()
-        assert meta.shape.rgb == expect_rgb
-        assert meta.is_indexed is expect_indexed
+        assert meta.is_indexed
+        assert meta.shape.rgb == 1
 
 
 def test_false_color_indexed_file_not_expanded(data_dir: Path) -> None:
@@ -156,11 +147,11 @@ def test_list_supported_suffixes() -> None:
     assert "nd2" in suffixes
 
 
-def test_bioformats_maven_coordinate() -> None:
-    coord = BioFile.bioformats_maven_coordinate()
+def test_maven_coordinate() -> None:
+    coord = BioFile.maven_coordinate()
     assert isinstance(coord, str)
     assert ":" in coord
-    assert "ome" in coord or "bio-formats" in coord
+    assert "scif" in coord
 
 
 def test_read_plane_subregion(opened_biofile: BioFile) -> None:
@@ -211,8 +202,8 @@ def test_biofile_with_meta_disabled(simple_file: Path) -> None:
         assert xml == ""
 
 
-def test_biofile_with_original_meta(simple_file: Path) -> None:
-    with BioFile(simple_file, original_meta=True) as bf:
+def test_biofile_group_files(simple_file: Path) -> None:
+    with BioFile(simple_file, group_files=False) as bf:
         arr = bf.as_array()
         assert arr is not None
 

@@ -1,4 +1,4 @@
-# Contributing to bffile
+# Contributing to scyfio
 
 Some quick notes/tips for contributors:
 
@@ -18,7 +18,7 @@ uv run pytest
 
 The first run will download test data from a Cloudflare R2 bucket. 
 To re-fetch the latest test data at any point, either delete `tests/data`, or use
-[the fetch test data script](https://github.com/psobolewskiPhD/bffile/blob/main/scripts/fetch_test_data.py):
+[the fetch test data script](https://github.com/psobolewskiPhD/scyfio/blob/main/scripts/fetch_test_data.py):
 
 ```sh
 uv run python scripts/fetch_test_data.py
@@ -39,7 +39,7 @@ uv run pytest --no-jgo-cache
 
 ## Understanding the Java setup and dependency management
 
-A goal of bffile is for the entire java setup and dependency management to be
+A goal of scyfio is for the entire java setup and dependency management to be
 fully automatic and transparent to users. It should "just work" on any system
 with Python and pip, without requiring users to have Java or Bio-Formats already
 installed, or to manually configure classpaths or environment variables.
@@ -47,11 +47,11 @@ installed, or to manually configure classpaths or environment variables.
 There is some very useful (but deep) java magic going on under the hood here,
 which is worth understanding:
 
-When someone `pip installs bffile` onto a clean system that perhaps doesn't even
-have Java installed, and then imports `bffile` and creates a `BioFile` object,
+When someone `pip installs scyfio` onto a clean system that perhaps doesn't even
+have Java installed, and then imports `scyfio` and creates a `BioFile` object,
 the following happens:
 
-1. **JVM Startup** (`bffile._java_stuff.start_jvm()`): Triggers
+1. **JVM Startup** (`scyfio._java_stuff.start_jvm()`): Triggers
    `scyjava.start_jvm()`, then redirects Java logging to Python.
 
 2. **Java Detection**: Inside of the `scyjava.start_jvm` function,

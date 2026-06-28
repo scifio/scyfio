@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 import numpy as np
 
-from bffile._utils import get_dask_tile_chunks
+from scyfio._utils import get_dask_tile_chunks
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     import dask.array
     import xarray
 
-    from bffile._biofile import BioFile
-    from bffile._zarr import BFArrayStore
+    from scyfio._biofile import BioFile
+    from scyfio._zarr import BFArrayStore
 
 
 BoundsTCZYXS: TypeAlias = tuple[slice, slice, slice, slice, slice, slice]
@@ -243,7 +243,7 @@ class LazyBioArray:
         except ImportError as e:
             raise ImportError(
                 "Dask is required for to_dask(). "
-                "Please install with `pip install bffile[dask]`"
+                "Please install with `pip install scyfio[dask]`"
             ) from e
 
         # Validate mutually exclusive parameters
@@ -257,11 +257,15 @@ class LazyBioArray:
         if tile_size is not None:
             # Validate tile_size format
             if tile_size == "auto":
-                # Query Bio-Formats for optimal tile size
+                # Query SCIFIO for the optimal tile size of this image.
                 rdr = self._biofile._ensure_java_reader()
-                rdr.setSeries(self._series)
-                rdr.setResolution(self._resolution)
-                tile_size = (rdr.getOptimalTileHeight(), rdr.getOptimalTileWidth())
+                image_index = self._biofile._image_index[self._series][  # type: ignore[index]
+                    self._resolution
+                ]
+                tile_size = (
+                    int(rdr.getOptimalTileHeight(image_index)),
+                    int(rdr.getOptimalTileWidth(image_index)),
+                )
             elif not (
                 isinstance(tile_size, tuple)
                 and len(tile_size) == 2
@@ -294,7 +298,7 @@ class LazyBioArray:
         except ImportError as e:
             raise ImportError(
                 "xarray is required for to_xarray(). "
-                "Install with `pip install bffile[xarray]`"
+                "Install with `pip install scyfio[xarray]`"
             ) from e
 
         return xr.DataArray(
@@ -314,7 +318,7 @@ class LazyBioArray:
         """Create a read-only zarr v3 store backed by this array.
 
         Each zarr chunk maps to a single ``read_plane()`` call. Requires
-        the ``zarr`` extra (``pip install bffile[zarr]``).
+        the ``zarr`` extra (``pip install scyfio[zarr]``).
 
         Parameters
         ----------
@@ -334,7 +338,7 @@ class LazyBioArray:
         BFArrayStore
             A zarr v3 Store suitable for ``zarr.open_array(store, mode="r")``.
         """
-        from bffile._zarr import BFArrayStore
+        from scyfio._zarr import BFArrayStore
 
         return BFArrayStore(
             self._biofile,
@@ -601,10 +605,9 @@ class LazyBioArray:
         bf = self._biofile
         # Acquire lock once for entire batch read
         with bf._lock:
-            # Set series and resolution once at start (not on every iteration)
             reader = bf._ensure_java_reader()
-            reader.setSeries(self._series)
-            reader.setResolution(self._resolution)
+            # Resolve the flat SCIFIO image index for this (series, resolution) once.
+            image_index = bf._image_index[self._series][self._resolution]  # type: ignore[index]
             meta = self._meta
             read_plane = bf._read_plane
 
@@ -623,7 +626,7 @@ class LazyBioArray:
                 enumerate(c_range),
                 enumerate(z_range),
             ):
-                plane = read_plane(reader, meta, t, c, z, y_slice, x_slice)
+                plane = read_plane(reader, meta, image_index, t, c, z, y_slice, x_slice)
                 if s_index is not None:
                     plane = plane[..., s_index]
                 if y_squee:  # y squeezed: drop axis 0

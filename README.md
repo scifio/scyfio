@@ -1,21 +1,21 @@
-# bffile
+# scyfio
 
-[![License](https://img.shields.io/pypi/l/bffile.svg?color=green)](https://github.com/imaging-formats/bffile/raw/main/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/bffile.svg?color=green)](https://pypi.org/project/bffile)
-[![Python Version](https://img.shields.io/pypi/pyversions/bffile.svg?color=green)](https://python.org)
-[![CI](https://github.com/imaging-formats/bffile/actions/workflows/ci.yml/badge.svg)](https://github.com/imaging-formats/bffile/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/imaging-formats/bffile/branch/main/graph/badge.svg)](https://codecov.io/gh/imaging-formats/bffile)
+[![License](https://img.shields.io/pypi/l/scyfio.svg?color=green)](https://github.com/imaging-formats/scyfio/raw/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/scyfio.svg?color=green)](https://pypi.org/project/scyfio)
+[![Python Version](https://img.shields.io/pypi/pyversions/scyfio.svg?color=green)](https://python.org)
+[![CI](https://github.com/imaging-formats/scyfio/actions/workflows/ci.yml/badge.svg)](https://github.com/imaging-formats/scyfio/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/imaging-formats/scyfio/branch/main/graph/badge.svg)](https://codecov.io/gh/imaging-formats/scyfio)
 
 Modern Bio-Formats wrapper for python
 
 ### Documentation 📖
 
-<https://imaging-formats.github.io/bffile/>
+<https://imaging-formats.github.io/scyfio/>
 
 ## Installation
 
 ```bash
-pip install bffile
+pip install scyfio
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ pip install bffile
 ### Quick Start
 
 ```python
-from bffile import BioFile
+from scyfio import BioFile
 import numpy as np
 
 with BioFile("tests/data/ND2_dims_p4z5t3c2y32x32.nd2") as bf:
@@ -49,7 +49,7 @@ with BioFile("tests/data/ND2_dims_p4z5t3c2y32x32.nd2") as bf:
 For simple cases, use `imread()` to load a single series/resolution into memory:
 
 ```python
-from bffile import imread
+from scyfio import imread
 
 # Read series0/resolution0 into numpy array
 # series and resolution parameters are optional and default to 0
@@ -79,7 +79,7 @@ To see the currently installed version of Bio-Formats, you can check the
 `BioFile.bioformats_version` static method:
 
 ```python
-from bffile import BioFile
+from scyfio import BioFile
 
 print(BioFile.bioformats_version())  # e.g. "8.1.1"
 ```
@@ -87,7 +87,7 @@ print(BioFile.bioformats_version())  # e.g. "8.1.1"
 and to see the full maven coordinate that was used:
 
 ```python
-from bffile import BioFile
+from scyfio import BioFile
 
 print(BioFile.bioformats_maven_coordinate())  # e.g. "ome:formats-gpl:8.1.1"
 ```
@@ -132,23 +132,23 @@ an important use case for you, please open an issue to discuss Java 8 support.
 
 Licensing is a bit complicated for this project, so please read carefully.
 
-- All code in this `bffile` repository is licensed under the [BSD-3-Clause
+- All code in this `scyfio` repository is licensed under the [BSD-3-Clause
   License](./LICENSE/LICENSE).  You may use and distribute this code under the
   terms of the BSD-3-Clause License.
-- However, a user who installs `bffile` from PyPI will, by default, end up with
+- However, a user who installs `scyfio` from PyPI will, by default, end up with
   Java jars that are licensed under the GPL-2.0 License (read below). As such,
   **this package is listed on PyPI as GPL-2.0-or-later**.
 
-When you run bffile for the first time, it will automatically download a number
+When you run scyfio for the first time, it will automatically download a number
 of Java jars (via [`jgo`](https://pypi.org/project/jgo/)), each of which has its
-own license.  By default, bffile downloads the
+own license.  By default, scyfio downloads the
 [`ome:formats-gpl:RELEASE`](https://mvnrepository.com/artifact/ome/formats-gpl)
 maven artifact.
 
 - `ome:formats-gpl` is licensed under the [GPLv2+
   License](./LICENSE/LICENSE_FORMATS_GPL)
 
-If you would like to use bffile without any GPL-licensed jars, you can instead
+If you would like to use scyfio without any GPL-licensed jars, you can instead
 opt into using
 [`ome:formats-bsd`](https://mvnrepository.com/artifact/ome/formats-bsd) by
 setting the `BIOFORMATS_VERSION` environment variable:
@@ -161,4 +161,4 @@ BIOFORMATS_VERSION="ome:formats-bsd"
   License](./LICENSE/LICENSE_FORMATS_BSD)
 
 If you need a package that defaults to BSD-licensed jars (and ships as
-BSD-3 on PyPI), open an issue to discuss a `bffile-bsd` variant.
+BSD-3 on PyPI), open an issue to discuss a `scyfio-bsd` variant.

@@ -13,7 +13,7 @@ exclude = ["typings", ".autoenv.zsh", "codecov.yml", "CLAUDE.md"]
 
 # https://peps.python.org/pep-0621/
 [project]
-name = "bffile"
+name = "scyfio"
 dynamic = ["version"]
 description = "Yet another Bio-Formats wrapper for python"
 readme = "README.md"
@@ -39,8 +39,8 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/imaging-formats/bffile"
-repository = "https://github.com/imaging-formats/bffile"
+homepage = "https://github.com/imaging-formats/scyfio"
+repository = "https://github.com/imaging-formats/scyfio"
 
 [project.optional-dependencies]
 dask = ["dask[array]>=2024.11.0"]
@@ -51,7 +51,7 @@ xarray = ["xarray>=2024.1.0"]
 test = ["pytest>=8.3.5", "pytest-cov>=6.1.1", "requests>=2.32.3"]
 test-all = [
     { include-group = "test" },
-    "bffile[dask,zarr,xarray]",
+    "scyfio[dask,zarr,xarray]",
     "yaozarrs[io]>=0.2.2",
 ]
 dev = [
@@ -74,7 +74,7 @@ docs = [
 ]
 
 [tool.uv.sources]
-bffile = { workspace = true }
+scyfio = { workspace = true }
 
 # https://docs.astral.sh/ruff
 [tool.ruff]
@@ -147,7 +147,7 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
-source = ["bffile"]
+source = ["scyfio"]
 
 [tool.check-manifest]
 ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*"]

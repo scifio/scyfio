@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 import pytest
 
-from bffile import BioFile
-from bffile._lazy_array import LazyBioArray
+from scyfio import BioFile
+from scyfio._lazy_array import LazyBioArray
 
 try:
     import xarray

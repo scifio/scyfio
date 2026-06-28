@@ -1,9 +1,9 @@
 [project]
-site_name = "bffile"
+site_name = "scyfio"
 site_description = "Modern, lazy Bio-Formats wrapper for Python."
-site_url = "http://imaging-formats.github.io/bffile/"
-repo_name = "imaging-formats/bffile"
-repo_url = "https://github.com/imaging-formats/bffile"
+site_url = "http://imaging-formats.github.io/scyfio/"
+repo_name = "imaging-formats/scyfio"
+repo_url = "https://github.com/imaging-formats/scyfio"
 copyright = ""
 
 nav = [

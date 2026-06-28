@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bffile import BioFile
+from scyfio import BioFile
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,8 +40,8 @@ def test_rgb_interleaved_layout(rgb_file: Path) -> None:
             assert plane.shape[-1] in (3, 4)
 
 
-def test_memoization_parameter_accepted(simple_file: Path) -> None:
-    bf = BioFile(simple_file, memoize=1000)
+def test_group_files_parameter_accepted(simple_file: Path) -> None:
+    bf = BioFile(simple_file, group_files=True)
     with bf:
         arr = bf.as_array()
         assert arr is not None

@@ -16,8 +16,8 @@ import boto3  # pyright: ignore[reportMissingImports]
 
 BUCKET = "bioformats-test-data"
 ENDPOINT = "https://09ca0424cb878b7f78db1f0c9f9031a4.r2.cloudflarestorage.com"
-OP_R2_ACCESS_KEY = "op://Private/CLOUDFLARE R2  bffile-sync/Access Key ID"
-OP_R2_SECRET_KEY = "op://Private/CLOUDFLARE R2  bffile-sync/Secret Access Key"
+OP_R2_ACCESS_KEY = "op://Private/CLOUDFLARE R2  scyfio-sync/Access Key ID"
+OP_R2_SECRET_KEY = "op://Private/CLOUDFLARE R2  scyfio-sync/Secret Access Key"
 LOCAL_DIR = Path(__file__).parent.parent / "tests" / "data"
 if not LOCAL_DIR.exists():
     raise FileNotFoundError(f"Local directory does not exist: {LOCAL_DIR}")

@@ -9,7 +9,7 @@ from xml.etree import ElementTree as ET
 
 import numpy as np
 
-log = logging.getLogger("bffile")
+log = logging.getLogger("scyfio")
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -482,6 +482,10 @@ def physical_pixel_sizes(ome: OME, scene: int = 0) -> PhysicalPixelSizes:
     We currently do not handle unit attachment to these values. Please see the file
     metadata for unit information.
     """
+    # Some formats produce OME metadata without per-image pixel data (e.g. native
+    # SCIFIO readers lacking an OME translator). Fall back to undefined sizes.
+    if scene >= len(ome.images):
+        return PhysicalPixelSizes(None, None, None)
     p = ome.images[scene].pixels
     return PhysicalPixelSizes(p.physical_size_z, p.physical_size_y, p.physical_size_x)
 

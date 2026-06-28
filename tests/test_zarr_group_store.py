@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from bffile import BioFile
-from bffile._imread import open_ome_zarr_group
+from scyfio import BioFile
+from scyfio._imread import open_ome_zarr_group
 
 if TYPE_CHECKING:
     import zarr

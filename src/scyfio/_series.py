@@ -9,13 +9,13 @@ if TYPE_CHECKING:
     import numpy as np
     import xarray
 
-    from bffile._biofile import BioFile
-    from bffile._lazy_array import LazyBioArray
-    from bffile._zarr._array_store import BFArrayStore
+    from scyfio._biofile import BioFile
+    from scyfio._lazy_array import LazyBioArray
+    from scyfio._zarr._array_store import BFArrayStore
 
 
 class Series:
-    """Proxy for a single series within a [`BioFile`][bffile.BioFile].
+    """Proxy for a single series within a [`BioFile`][scyfio.BioFile].
 
     Provides convenient access to metadata and data for one series without
     needing to pass ``series=`` to every method call.
@@ -211,6 +211,16 @@ class Series:
             If True, only return files that do not contain pixel data (e.g., metadata,
             companion files, etc...), by default `False`.
         """
-        reader = self._biofile._ensure_java_reader()
-        reader.setSeries(self._index)
-        return [str(f) for f in reader.getSeriesUsedFiles(metadata_only) or ()]
+        from scyfio._biofile import _bf_underlying_reader
+
+        self._biofile._ensure_java_reader()
+        bf_reader = _bf_underlying_reader(self._biofile._java_metadata)
+        if bf_reader is not None:
+            try:
+                bf_reader.setSeries(self._index)
+                return [
+                    str(f) for f in bf_reader.getSeriesUsedFiles(metadata_only) or ()
+                ]
+            except Exception:
+                pass
+        return self._biofile.used_files(metadata_only=metadata_only)

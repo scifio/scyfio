@@ -12,8 +12,8 @@ from ome_types.model import UnitsLength, UnitsTime
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.sync import sync
 
-from bffile._utils import physical_pixel_sizes
-from bffile._zarr._base_store import ReadOnlyStore
+from scyfio._utils import physical_pixel_sizes
+from scyfio._zarr._base_store import ReadOnlyStore
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -23,8 +23,8 @@ if TYPE_CHECKING:
     from zarr.core.buffer import Buffer, BufferPrototype
     from zarr.storage import StoreLike
 
-    from bffile._biofile import BioFile
-    from bffile._zarr._array_store import BFArrayStore
+    from scyfio._biofile import BioFile
+    from scyfio._zarr._array_store import BFArrayStore
 
 # OME-NGFF dimension type mapping
 _DIMENSION_TYPES = {
@@ -223,18 +223,21 @@ class BFOmeZarrStore(ReadOnlyStore):
         For RGB images, the C dimension is expanded to include RGB samples
         (e.g., C=2 with RGB=3 becomes C=6).
         """
-        pixels = ome.images[series].pixels
+        # Some formats produce OME metadata without per-image pixel data; in that case
+        # we simply emit axes without physical units.
+        pixels = ome.images[series].pixels if series < len(ome.images) else None
         store_0 = self._get_array_store(series, 0)
         for name in store_0.dimension_names():
             dim_type = _DIMENSION_TYPES.get(name, "other")
             axis: dict[str, str] = {"name": name, "type": dim_type}
             if (
-                dim_type == "time"
+                pixels is not None
+                and dim_type == "time"
                 and "time_increment_unit" in pixels.model_fields_set
                 and (unit := _OME_TO_NGFF_TIME.get(pixels.time_increment_unit))
             ):
                 axis["unit"] = unit
-            elif dim_type == "space":
+            elif pixels is not None and dim_type == "space":
                 field_name = f"physical_size_{name}_unit"
                 if field_name in pixels.model_fields_set:
                     if unit := _OME_TO_NGFF_LENGTH.get(getattr(pixels, field_name)):

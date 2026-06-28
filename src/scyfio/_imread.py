@@ -37,7 +37,7 @@ def imread(path: str | Path, *, series: int = 0, resolution: int = 0) -> np.ndar
 
     Examples
     --------
-    >>> from bffile import imread
+    >>> from scyfio import imread
     >>> data = imread("image.nd2")
     >>> print(data.shape, data.dtype)
     (10, 2, 5, 512, 512) uint16
@@ -91,12 +91,12 @@ def open_zarr_array(
 
     Examples
     --------
-    >>> import bffile
-    >>> arr = bffile.open_zarr_array("image.jpg")
+    >>> import scyfio
+    >>> arr = scyfio.open_zarr_array("image.jpg")
     >>> arr.shape  # RGB as last dimension (like imread)
     (1, 1, 1, 512, 512, 3)
 
-    >>> arr = bffile.open_zarr_array("image.jpg", rgb_as_channels=True)
+    >>> arr = scyfio.open_zarr_array("image.jpg", rgb_as_channels=True)
     >>> arr.shape  # RGB interleaved as channels (OME-Zarr style)
     (1, 3, 1, 512, 512)
     """

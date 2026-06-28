@@ -9,7 +9,7 @@ import sys
 import pytest
 
 SCRIPT = """\
-import bffile._java_stuff  # noqa: F401
+import scyfio._java_stuff  # noqa: F401
 import scyjava
 scyjava.start_jvm()
 System = scyjava.jimport("java.lang.System")
@@ -22,7 +22,7 @@ print(f"VENDOR:{System.getProperty('java.vendor')}")
 def test_java_constraints_unit(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unit test: verify env vars are correctly passed to scyjava.
 
-    This is a fast unit test that mocks scyjava to verify that bffile
+    This is a fast unit test that mocks scyjava to verify that scyfio
     correctly reads BFF_JAVA_* env vars and passes them to scyjava.
     """
     from unittest.mock import MagicMock, patch
@@ -36,10 +36,10 @@ def test_java_constraints_unit(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_config = MagicMock()
     with patch("scyjava.config", mock_config):
         # Force reimport to trigger the env var logic
-        if "bffile._java_stuff" in sys.modules:
-            del sys.modules["bffile._java_stuff"]
+        if "scyfio._java_stuff" in sys.modules:
+            del sys.modules["scyfio._java_stuff"]
 
-        import bffile._java_stuff  # noqa: F401
+        import scyfio._java_stuff  # noqa: F401
 
         # Verify scyjava.config.set_java_constraints was called correctly
         mock_config.set_java_constraints.assert_called_once_with(

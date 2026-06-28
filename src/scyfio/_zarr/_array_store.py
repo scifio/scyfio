@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from bffile._zarr._base_store import ReadOnlyStore
+from scyfio._zarr._base_store import ReadOnlyStore
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from zarr.abc.store import ByteRequest
     from zarr.core.buffer import Buffer, BufferPrototype
 
-    from bffile._biofile import BioFile
+    from scyfio._biofile import BioFile
 
 
 class BFArrayStore(ReadOnlyStore):

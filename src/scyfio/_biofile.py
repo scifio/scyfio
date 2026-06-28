@@ -10,17 +10,17 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import jpype
 import numpy as np
 from ome_types import OME
 
-from bffile._core_metadata import CoreMetadata
-from bffile._series import Series
+from scyfio._core_metadata import CoreMetadata
+from scyfio._series import Series
 
 from . import _utils
-from ._java_stuff import jtype_to_python
+from ._java_stuff import get_scifio, jtype_to_python
 from ._jimports import jimport
 
 if TYPE_CHECKING:
@@ -28,14 +28,15 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     import dask.array
-    import java.lang
     import xarray as xr
-    from loci.formats import IFormatReader
     from typing_extensions import Self
 
-    from bffile._lazy_array import LazyBioArray
-    from bffile._zarr import BFOmeZarrStore
-    from bffile._zarr._array_store import BFArrayStore
+    # SCIFIO's io.scif.Reader has no type stub in ./typings; treat it opaquely.
+    IFormatReader = Any
+
+    from scyfio._lazy_array import LazyBioArray
+    from scyfio._zarr import BFOmeZarrStore
+    from scyfio._zarr._array_store import BFArrayStore
 
 
 @dataclass(frozen=True)
@@ -130,29 +131,11 @@ class BioFile(Sequence[Series]):
         Path to file
     meta : bool, optional
         Whether to get metadata as well, by default True
-    original_meta : bool, optional
-        Whether to also retrieve the proprietary metadata as structured annotations in
-        the OME output, by default False
-    memoize : bool or int, optional
-        Threshold (in milliseconds) for memoizing the reader. If the time
-        required to call `reader.setId()` is larger than this number, the initialized
-        reader (including all reader wrappers) will be cached in a memo file, reducing
-        time to load the file on future reads. By default, this results in a hidden
-        `.bfmemo` file in the same directory as the file. The `BIOFORMATS_MEMO_DIR`
-        environment can be used to change the memo file directory.
-        Set `memoize` to greater than 0 to turn on memoization, by default it's off.
-        https://downloads.openmicroscopy.org/bio-formats/latest/api/loci/formats/Memoizer.html
-    options : dict[str, bool], optional
-        A mapping of option-name -> bool specifying additional reader-specific options.
-        See: https://docs.openmicroscopy.org/bio-formats/latest/formats/options.html
-        For example: to turn off chunkmap table reading for ND2 files, use
-        `options={"nativend2.chunkmap": False}`
-    channel_filler : bool or None, optional
-        Whether to wrap the reader with Bio-Formats' ChannelFiller, which
-        expands indexed-color data (e.g. GIF palettes) into RGB. If `True`,
-        always use ChannelFiller. If `False`, never use it. If `None`
-        (default), automatically apply it when the file contains true
-        indexed-color data.
+    group_files : bool or None, optional
+        Whether SCIFIO should group related files in a multi-file dataset (e.g. a
+        directory of single-plane TIFFs) into one logical image. Maps to SCIFIO's
+        ``SCIFIOConfig.groupableSetGroupFiles``. If `None` (default), the format's
+        own default behavior is used.
     """
 
     def __init__(
@@ -160,26 +143,30 @@ class BioFile(Sequence[Series]):
         path: str | os.PathLike,
         *,
         meta: bool = True,
-        original_meta: bool = False,
-        memoize: int | bool = 0,
-        options: dict[str, bool] | None = None,
-        channel_filler: bool | None = None,
+        group_files: bool | None = None,
     ):
         self._path = str(path)
         self._lock = RLock()
         self._meta = meta
-        self._original_meta = original_meta
-        self._memoize = memoize
-        self._options = options
-        self._channel_filler = channel_filler
+        self._group_files = group_files
 
         # Reader and finalizer created in open()
         self._java_reader: IFormatReader | None = None
+        # SCIFIO Metadata (io.scif.Metadata) for the open reader
+        self._java_metadata: Any = None
         # 2D structure: list[series][resolution]
         self._core_meta_list: list[list[CoreMetadata]] | None = None
+        # maps (series, resolution) -> flat SCIFIO image index used by openPlane
+        self._image_index: list[list[int]] | None = None
         self._cached_ome_meta: OME | None = None
+        self._cached_ome_xml: str | None = None
         self._finalizer: weakref.finalize | None = None
+        # _suspended is the user-facing logical state toggled by open()/close().
+        # _source_live tracks whether the Java source handle is actually acquired —
+        # reads transparently re-acquire it without changing the logical state, which
+        # mirrors Bio-Formats' on-demand reopen behavior.
         self._suspended: bool = False
+        self._source_live: bool = False
 
     def core_metadata(self, series: int = 0, resolution: int = 0) -> CoreMetadata:
         """Get metadata for specified series and resolution.
@@ -238,9 +225,11 @@ class BioFile(Sequence[Series]):
         RuntimeError
             If file is not open
         """
-        reader = self._ensure_java_reader()
-        meta = reader.getGlobalMetadata()
-        return {str(k): jtype_to_python(v) for k, v in meta.items()}
+        self._ensure_java_reader()
+        table = self._java_metadata.getTable()
+        if table is None:  # pragma: no cover
+            return {}
+        return {str(k): jtype_to_python(v) for k, v in table.items()}
 
     def open(self) -> Self:
         """Open file and initialize reader, or re-open if previously closed.
@@ -276,64 +265,79 @@ class BioFile(Sequence[Series]):
                 return self  # Already open
 
             if self._suspended:
-                # Fast path: reacquire file handle only
+                # Fast path: reacquire the file handle (if a read hasn't already done
+                # so transparently) and clear the logical suspended state. Parsed
+                # Python-side metadata is preserved.
                 try:
-                    self._java_reader.reopenFile()  # type: ignore[union-attr]
+                    self._acquire_source()
                 except Exception:
                     self.destroy()
                     raise
                 self._suspended = False
                 return self
 
-            # Full initialization (first open, or after context-manager exit)
-            r = jimport("loci.formats.ImageReader")()
-            r.setFlattenedResolutions(False)
-
-            if self._channel_filler is True:
-                ChannelFiller = jimport("loci.formats.ChannelFiller")
-                r = ChannelFiller(r)
-
-            if self._memoize > 0:
-                Memoizer = jimport("loci.formats.Memoizer")
-                if BIOFORMATS_MEMO_DIR is not None:
-                    r = Memoizer(r, self._memoize, BIOFORMATS_MEMO_DIR)
-                else:
-                    r = Memoizer(r, self._memoize)
-
-            if self._meta:
-                r.setMetadataStore(self._create_ome_meta())
-            if self._original_meta:
-                r.setOriginalMetadataPopulated(True)
-
-            if self._options:
-                mo = jimport("loci.formats.in_.DynamicMetadataOptions")()
-                for name, value in self._options.items():
-                    mo.set(name, str(value))
-                r.setMetadataOptions(mo)
-
+            # Full initialization (first open, or after context-manager exit).
+            # SCIFIO's initializer auto-detects the format and returns a Reader.
+            scifio = get_scifio()
+            r = scifio.initializer().initializeReader(
+                self._make_location(), self._make_config()
+            )
             try:
-                r.setId(self._path)
-
-                # Auto-detect: wrap with ChannelFiller for true indexed color
-                if (
-                    self._channel_filler is None
-                    and r.isIndexed()
-                    and not r.isFalseColor()
-                ):
-                    ChannelFiller = jimport("loci.formats.ChannelFiller")
-                    r = ChannelFiller(r)
-                    r.setId(self._path)
-
-                core_meta = self._get_core_metadata(r)
+                core_meta, image_index = self._get_core_metadata(r)
             except Exception:  # pragma: no cover
                 with suppress(Exception):
                     r.close()
                 raise
 
             self._java_reader = r
+            self._java_metadata = r.getMetadata()
             self._core_meta_list = core_meta
+            self._image_index = image_index
+            self._source_live = True
             self._finalizer = weakref.finalize(self, _close_java_reader, r)
         return self
+
+    def _acquire_source(self) -> None:
+        """Re-acquire the file handle for a suspended reader.
+
+        Unlike Bio-Formats, a SCIFIO reader cannot reopen after ``close(fileOnly)``
+        (both ``setSource`` and ``openPlane`` raise). So we fully release the stale
+        reader and initialize a fresh one for the same file. The cached Python-side
+        metadata (``_core_meta_list`` / ``_image_index``) is unchanged because the file
+        is identical.
+        """
+        if self._source_live:
+            return
+        # Drop the stale reader (and its finalizer) and build a fresh one.
+        if self._finalizer is not None:
+            self._finalizer()
+            self._finalizer = None
+        scifio = get_scifio()
+        r = scifio.initializer().initializeReader(
+            self._make_location(), self._make_config()
+        )
+        self._java_reader = r
+        self._java_metadata = r.getMetadata()
+        self._source_live = True
+        self._finalizer = weakref.finalize(self, _close_java_reader, r)
+
+    def _make_location(self) -> Any:
+        """Wrap the file path in a SciJava ``FileLocation`` for SCIFIO."""
+        FileLocation = jimport("org.scijava.io.location.FileLocation")
+        return FileLocation(os.path.abspath(self._path))
+
+    def _make_config(self) -> Any:
+        """Build the ``SCIFIOConfig`` for reader initialization.
+
+        A config must always be supplied: the no-config code path uses name-only
+        format detection, which fails for formats that require inspecting file
+        content (e.g. CZI).
+        """
+        SCIFIOConfig = jimport("io.scif.config.SCIFIOConfig")
+        config = SCIFIOConfig()
+        if self._group_files is not None:
+            config.groupableSetGroupFiles(self._group_files)
+        return config
 
     def ensure_open(self) -> _EnsureOpenContext:
         """Context manager that temporarily opens the file if closed.
@@ -382,8 +386,10 @@ class BioFile(Sequence[Series]):
         Safe to call multiple times — no-op if already closed.
         """
         with self._lock:
-            if self._java_reader is not None and not self._suspended:
-                self._java_reader.close(True)  # fileOnly=True
+            if self._java_reader is not None:
+                if self._source_live:
+                    self._java_reader.close(True)  # fileOnly=True
+                    self._source_live = False
                 self._suspended = True
 
     def destroy(self) -> None:
@@ -401,8 +407,11 @@ class BioFile(Sequence[Series]):
                 self._finalizer()
                 self._finalizer = None
             self._java_reader = None
+            self._java_metadata = None
             self._core_meta_list = None
+            self._image_index = None
             self._suspended = False
+            self._source_live = False
 
     def as_array(self, series: int = 0, resolution: int = 0) -> LazyBioArray:
         """Return a lazy numpy-compatible array that reads data on-demand.
@@ -454,7 +463,7 @@ class BioFile(Sequence[Series]):
 
         Planes >2GB automatically use tiled reading (transparent, ~20% slower).
         """
-        from bffile._lazy_array import LazyBioArray
+        from scyfio._lazy_array import LazyBioArray
 
         meta0 = self.core_metadata(series)  # validates series
         resolution = _normalize_resolution(resolution, meta0.resolution_count)
@@ -546,7 +555,7 @@ class BioFile(Sequence[Series]):
         - Conforms to NGFF v0.5 specification
         """
         if series is None:
-            from bffile._zarr._group_store import BFOmeZarrStore
+            from scyfio._zarr._group_store import BFOmeZarrStore
 
             return BFOmeZarrStore(self, tile_size=tile_size)
 
@@ -564,7 +573,7 @@ class BioFile(Sequence[Series]):
         """Create dask array for lazy computation on Bio-Formats data.
 
         Returns a dask array in TCZYX[r] order that wraps a
-        [`LazyBioArray`][bffile.LazyBioArray]. Uses single-threaded scheduler
+        [`LazyBioArray`][scyfio.LazyBioArray]. Uses single-threaded scheduler
         for Bio-Formats thread safety.
 
         Parameters
@@ -652,20 +661,28 @@ class BioFile(Sequence[Series]):
 
     @property
     def ome_xml(self) -> str:
-        """Return plain OME XML string."""
-        reader = self._ensure_java_reader()
-        if store := reader.getMetadataStore():
+        """Return plain OME XML string.
+
+        SCIFIO produces OME-XML by *translation*: the format-specific metadata is
+        translated into an ``io.scif.ome.OMEMetadata`` object, whose root is a
+        Bio-Formats ``OMEXMLMetadata`` that can dump XML.
+        """
+        self._ensure_java_reader()  # validate open state
+        if not self._meta:
+            return ""
+        if self._cached_ome_xml is None:
+            self._cached_ome_xml = ""
             try:
-                # get metadatastore can return various types of objects,
-                # only the OME pyramidal metadata has dumpXML method,
-                # (but it's also the most common case here and only useful one)
-                # so just warn on error and return empty string.
-                return str(store.dumpXML())  # pyright: ignore
+                scifio = get_scifio()
+                OMEMetadata = jimport("io.scif.ome.OMEMetadata")
+                omexml = OMEMetadata(scifio.getContext())
+                scifio.translator().translate(self._java_metadata, omexml, True)
+                self._cached_ome_xml = str(omexml.getRoot().dumpXML())
             except Exception as e:
                 warnings.warn(
                     f"Failed to retrieve OME XML: {e}", RuntimeWarning, stacklevel=2
                 )
-        return ""
+        return self._cached_ome_xml
 
     @property
     def ome_metadata(self) -> OME:
@@ -694,7 +711,7 @@ class BioFile(Sequence[Series]):
         return len(self._core_meta_list)
 
     def series_count(self) -> int:
-        """Return the number of series in the file (same as [`__len__`][bffile.BioFile.__len__])."""  # noqa: E501
+        """Return the number of series in the file (same as [`__len__`][scyfio.BioFile.__len__])."""  # noqa: E501
         return len(self)
 
     @overload
@@ -702,7 +719,7 @@ class BioFile(Sequence[Series]):
     @overload
     def __getitem__(self, index: slice) -> list[Series]: ...
     def __getitem__(self, index: int | slice) -> Series | list[Series]:
-        """Return a [`Series`][bffile.Series] proxy for the given index.
+        """Return a [`Series`][scyfio.Series] proxy for the given index.
 
         Parameters
         ----------
@@ -722,11 +739,14 @@ class BioFile(Sequence[Series]):
         ----------
         metadata_only : bool, optional
             If True, only return files that do not contain pixel data (e.g., metadata,
-            companion files, etc...), by default `False`.
+            companion files, etc...), by default `False`. Only honored for formats read
+            through the Bio-Formats compatibility layer.
         """
-        return [
-            str(x) for x in self._ensure_java_reader().getUsedFiles(metadata_only) or ()
-        ]
+        self._ensure_java_reader()
+        if (bf_reader := _bf_underlying_reader(self._java_metadata)) is not None:
+            with suppress(Exception):
+                return [str(x) for x in bf_reader.getUsedFiles(metadata_only) or ()]
+        return [self._path]
 
     def lookup_table(self, series: int = 0) -> np.ndarray | None:
         """Return the color lookup table for an indexed-color series.
@@ -749,7 +769,7 @@ class BioFile(Sequence[Series]):
 
         ``python
         import cmap
-        from bffile import BioFile
+        from scyfio import BioFile
 
         with BioFile("indexed_image.ome.tiff") as bf:
             lut = bf.lookup_table()
@@ -766,14 +786,13 @@ class BioFile(Sequence[Series]):
         if not self.core_metadata(series).is_indexed:
             return None
 
-        reader = self._ensure_java_reader()
-        reader.setSeries(series)
-        # Many readers require at least one openBytes call before LUT is available
-        reader.openBytes(0, 0, 0, 1, 1)
-        if (lut := reader.get16BitLookupTable()) is not None:
-            return np.asarray(lut, dtype=np.uint16).T
-        if (lut := reader.get8BitLookupTable()) is not None:
-            return np.asarray(lut, dtype=np.uint8).T
+        self._ensure_java_reader()
+        image_index = self._image_index[series][0]  # type: ignore[index]
+        # SCIFIO exposes color tables on metadata that implements HasColorTable.
+        with suppress(Exception):
+            color_table = self._java_metadata.getColorTable(image_index, 0)
+            if color_table is not None:
+                return _color_table_to_numpy(color_table)
         return None
 
     def __iter__(self) -> Iterator[Series]:
@@ -843,21 +862,31 @@ class BioFile(Sequence[Series]):
         to_dask : Create a dask array for lazy loading
         """
         reader = self._ensure_java_reader()
-        reader.setSeries(series)
         n_res = len(self._core_meta_list[series])  # type: ignore[index]
         resolution = _normalize_resolution(resolution, n_res)
-        reader.setResolution(resolution)
+        image_index = self._image_index[series][resolution]  # type: ignore[index]
 
         # Get metadata for this series/resolution
         meta = self.core_metadata(series, resolution)
         shape = meta.shape
+
+        # Validate plane coordinates (SCIFIO does not always raise on overflow).
+        for name, value, limit in (
+            ("t", t, shape.t),
+            ("c", c, shape.c),
+            ("z", z, shape.z),
+        ):
+            if not 0 <= value < limit:
+                raise IndexError(
+                    f"{name}={value} out of range for this image (0 to {limit - 1})"
+                )
 
         # Handle default slices
         y = y if y is not None else slice(0, shape.y)
         x = x if x is not None else slice(0, shape.x)
 
         # Call optimized internal method
-        im = self._read_plane(reader, meta, t, c, z, y, x)
+        im = self._read_plane(reader, meta, image_index, t, c, z, y, x)
 
         # If buffer provided, copy into it (for reuse in loops)
         if buffer is not None:
@@ -869,104 +898,130 @@ class BioFile(Sequence[Series]):
     # ========================== static methods ==========================
 
     @staticmethod
+    def scifio_version() -> str:
+        """Get the version of SCIFIO."""
+        try:
+            return str(get_scifio().getVersion())
+        except Exception:  # pragma: no cover
+            return "unknown"
+
+    # Deprecated alias retained for backwards compatibility.
+    @staticmethod
     def bioformats_version() -> str:
-        """Get the version of Bio-Formats."""
-        Version = jimport("loci.formats.FormatTools")
-        return str(getattr(Version, "VERSION", "unknown"))
+        """Deprecated alias for [`scifio_version`][scyfio.BioFile.scifio_version]."""
+        return BioFile.scifio_version()
 
     @staticmethod
-    def bioformats_maven_coordinate() -> str:
-        """Return the Maven coordinate used to load Bio-Formats.
-
-        This was either provided via the `BIOFORMATS_VERSION` environment variable, or
-        is the default value, in format "groupId:artifactId:version",
-        See <https://mvnrepository.com/artifact/ome> for available versions.
-        """
+    def maven_coordinate() -> str:
+        """Return the Maven coordinate used to load SCIFIO (scifio-bf-compat)."""
         from ._java_stuff import MAVEN_COORDINATE
 
         return MAVEN_COORDINATE
 
+    # Deprecated alias retained for backwards compatibility.
+    @staticmethod
+    def bioformats_maven_coordinate() -> str:
+        """Deprecated alias for [`maven_coordinate`][scyfio.BioFile.maven_coordinate]."""  # noqa: E501
+        return BioFile.maven_coordinate()
+
     @staticmethod
     @cache
     def list_supported_suffixes() -> set[str]:
-        """List all file suffixes supported by the available readers."""
-        reader = jimport("loci.formats.ImageReader")()
-        return {str(x) for x in reader.getSuffixes()}
+        """List all file suffixes supported by the available SCIFIO formats."""
+        suffixes: set[str] = set()
+        for fmt in get_scifio().format().getAllFormats():
+            with suppress(Exception):
+                suffixes.update(str(s) for s in fmt.getSuffixes())
+        return suffixes
 
     @staticmethod
     @cache
     def list_available_readers() -> list[ReaderInfo]:
-        """List all available Bio-Formats readers.
+        """List all available SCIFIO formats.
 
         Returns
         -------
         list[ReaderInfo]
-            Information about each available reader, including:
+            Information about each available format, including:
 
             - format: human-readable format name (e.g., "Nikon ND2")
             - suffixes: supported file extensions (e.g., ("nd2", "jp2"))
-            - class_name: full Java class name (e.g., "ND2Reader")
-            - is_gpl: whether this reader requires GPL license (True) or is BSD (False)
+            - class_name: full Java class name of the Format
+            - is_gpl: best-effort license flag. SCIFIO does not expose per-format
+              licensing, so this is always ``False`` (unknown).
         """
-        ImageReader = jimport("loci.formats.ImageReader")
-        temp_reader = ImageReader()
-        try:
-            formats = []
-            for reader in temp_reader.getReaders():
-                reader_cls = cast("java.lang.Class", reader.getClass())  # type: ignore
-                class_name = str(reader_cls.getName()).removeprefix("loci.formats.in.")
-
-                # Detect license from JAR file name
-                # GPL readers come from formats-gpl-X.X.X.jar
-                # BSD readers come from formats-bsd-X.X.X.jar
-                is_gpl = True
-                with suppress(Exception):
-                    protection_domain = reader_cls.getProtectionDomain()
-                    if (code_source := protection_domain.getCodeSource()) is not None:
-                        location = str(code_source.getLocation())
-                        is_gpl = "formats-gpl-" in location.split("/")[-1]
-
-                formats.append(
-                    ReaderInfo(
-                        format=str(reader.getFormat()),
-                        suffixes=tuple(str(s) for s in reader.getSuffixes()),
-                        class_name=class_name,
-                        is_gpl=is_gpl,
-                    )
+        formats = []
+        for fmt in get_scifio().format().getAllFormats():
+            class_name = str(fmt.getClass().getName()).removeprefix("io.scif.formats.")
+            formats.append(
+                ReaderInfo(
+                    format=str(fmt.getFormatName()),
+                    suffixes=tuple(str(s) for s in fmt.getSuffixes()),
+                    class_name=class_name,
+                    is_gpl=False,
                 )
-
-            return formats
-        finally:
-            temp_reader.close()
+            )
+        return formats
 
     # ========================== Internal methods ==========================
 
     def _ensure_java_reader(self) -> IFormatReader:
-        """Return the native reader, raising if not open."""
+        """Return the native reader, raising if never opened.
+
+        If the reader is suspended (file handle released via ``close()``) it is
+        transparently resumed first — SCIFIO readers, unlike Bio-Formats, do not
+        re-acquire the source on demand, so we do it here. This keeps lazy consumers
+        (e.g. zarr stores that outlive an ``ensure_open()`` block) working.
+        """
         if self._java_reader is None:
             raise RuntimeError("File not open - call open() first")
+        # Transparently re-acquire the source handle if it was released by close(),
+        # without clearing the logical suspended state (mirrors Bio-Formats).
+        self._acquire_source()
         return self._java_reader
 
-    def _get_core_metadata(self, reader: IFormatReader) -> list[list[CoreMetadata]]:
-        """Parse flat CoreMetadata list into 2D structure.
+    def _get_core_metadata(
+        self, reader: IFormatReader
+    ) -> tuple[list[list[CoreMetadata]], list[list[int]]]:
+        """Parse SCIFIO metadata into the 2D ``[series][resolution]`` structure.
 
-        Bio-Formats returns metadata as a flat list where entries are organized
-        as: [series0_res0, series0_res1, ..., series1_res0, series1_res1, ...].
-        The first entry of each series has resolution_count set to indicate how
-        many resolution levels that series has.
+        Returns both the metadata grid and a parallel grid mapping each
+        ``(series, resolution)`` to the flat SCIFIO image index used by
+        ``reader.openPlane``.
+
+        SCIFIO has no native concept of resolution levels — each "image" is a single
+        plane stack. The Bio-Formats compatibility layer flattens Bio-Formats
+        resolution levels into separate SCIFIO images. To reconstruct pyramids we peek
+        at the underlying Bio-Formats reader's ``CoreMetadataList`` (which still carries
+        the per-series ``resolutionCount`` even when flattened) and chunk the flat image
+        list accordingly. Native SCIFIO formats fall through to one resolution per
+        image.
         """
-        # Cache metadata in 2D structure: list[series][resolution]
-        # Bio-Formats returns a flat list where the first entry of each
-        # series has resolutionCount set. We parse this into 2D.
-        flat_list = [CoreMetadata.from_java(x) for x in reader.getCoreMetadataList()]
+        meta = reader.getMetadata()
+        image_count = int(reader.getImageCount())
+
+        # Resolution grouping: how many consecutive images form each series.
+        # Only the Bio-Formats compatibility layer exposes pyramids; everything else
+        # gets one resolution per image.
+        res_counts = _bf_resolution_counts(meta, image_count)
+
+        # Per-image CoreMetadata, derived from the SCIFIO ImageMetadata so that plane
+        # indexing (which goes through SCIFIO's axis model) stays consistent.
+        per_image = [
+            CoreMetadata.from_image_metadata(meta.get(i)) for i in range(image_count)
+        ]
 
         result: list[list[CoreMetadata]] = []
-        i = 0
-        while i < len(flat_list):
-            resolution_count = flat_list[i].resolution_count
-            result.append(flat_list[i : i + resolution_count])
-            i += resolution_count
-        return result
+        image_index: list[list[int]] = []
+        flat = 0
+        for count in res_counts:
+            group = per_image[flat : flat + count]
+            for cm in group:
+                cm.resolution_count = count
+            result.append(group)
+            image_index.append(list(range(flat, flat + count)))
+            flat += count
+        return result, image_index
 
     def get_thumbnail(
         self,
@@ -1036,11 +1091,19 @@ class BioFile(Sequence[Series]):
             y_start, x_start = 0, 0
 
         tz = low_meta.shape.z // 2 if z is None else z
+        image_index = self._image_index[series][low_res]  # type: ignore[index]
         with self._lock:
-            reader.setSeries(series)
-            reader.setResolution(low_res)
             img = self._read_plane_direct(
-                reader, low_meta, t, c, tz, y_start, x_start, read_h, read_w
+                reader,
+                low_meta,
+                image_index,
+                t,
+                c,
+                tz,
+                y_start,
+                x_start,
+                read_h,
+                read_w,
             )
 
         target_x, target_y = _thumbnail_target_size(sx, sy, max_size=max_thumbnail_size)
@@ -1053,14 +1116,84 @@ class BioFile(Sequence[Series]):
             index += n
         if index < 0 or index >= n:
             raise IndexError(f"Series index {index} out of range (file has {n} series)")
-        from bffile._series import Series
+        from scyfio._series import Series
 
         return Series(self, index)
+
+    def _plane_index(self, image_index: int, z: int, c: int, t: int) -> int:
+        """Map a ``(z, c, t)`` position to a SCIFIO plane (raster) index.
+
+        SCIFIO's plane index is a raster over the image's *non-planar* axes. We walk
+        those axes, placing ``z`` on the Z axis, ``t`` on the Time axis, and
+        distributing the channel index ``c`` across any remaining (channel-like) axes
+        — Bio-Formats RGB data can introduce extra channel axes with non-standard
+        labels. Verified pixel-identical to Bio-Formats ``getIndex(z, c, t)``.
+        """
+        Axes = jimport("net.imagej.axis.Axes")
+        imeta = self._java_metadata.get(image_index)
+        planar = int(imeta.getPlanarAxisCount())
+        n = int(imeta.getAxes().size())
+
+        lengths: list[int] = []
+        pos: list[int] = []
+        chan_dims: list[int] = []
+        for d in range(planar, n):
+            axis_type = imeta.getAxis(d).type()
+            lengths.append(int(imeta.getAxisLength(axis_type)))
+            if axis_type == Axes.Z:
+                pos.append(z)
+            elif axis_type == Axes.TIME:
+                pos.append(t)
+            else:
+                pos.append(0)
+                chan_dims.append(len(lengths) - 1)
+
+        if not lengths:
+            return 0
+
+        # spread the single channel index across channel-like axes (first fastest)
+        remaining = c
+        for d in chan_dims:
+            pos[d] = remaining % lengths[d]
+            remaining //= lengths[d]
+
+        FormatTools = jimport("io.scif.util.FormatTools")
+        la = jpype.JArray(jpype.JLong)(lengths)
+        pa = jpype.JArray(jpype.JLong)(pos)
+        return int(FormatTools.positionToRaster(la, pa))
+
+    def _make_bounds(
+        self, image_index: int, y_start: int, x_start: int, height: int, width: int
+    ) -> Any:
+        """Build an ``Interval`` over all planar axes for a sub-region read.
+
+        The interval must span every planar axis (X, Y, and any colour-sample axis
+        such as interleaved RGB), not just X/Y, or SCIFIO raises an index error.
+        """
+        Axes = jimport("net.imagej.axis.Axes")
+        FinalInterval = jimport("net.imglib2.FinalInterval")
+        imeta = self._java_metadata.get(image_index)
+        planar = int(imeta.getPlanarAxisCount())
+        mins: list[int] = []
+        sizes: list[int] = []
+        for d in range(planar):
+            axis_type = imeta.getAxis(d).type()
+            if axis_type == Axes.X:
+                mins.append(x_start)
+                sizes.append(width)
+            elif axis_type == Axes.Y:
+                mins.append(y_start)
+                sizes.append(height)
+            else:
+                mins.append(0)
+                sizes.append(int(imeta.getAxisLength(axis_type)))
+        return FinalInterval.createMinSize(*(mins + sizes))
 
     def _read_plane(
         self,
         reader: IFormatReader,
         meta: CoreMetadata,
+        image_index: int,
         t: int,
         c: int,
         z: int,
@@ -1070,8 +1203,8 @@ class BioFile(Sequence[Series]):
         """Fast plane reading for hot path (internal use only).
 
 
-        This method skips all validation, metadata lookups, and series/resolution
-        setting, assuming they've been done once before entering a tight loop.
+        This method skips all validation and metadata lookups, assuming they've been
+        done once before entering a tight loop.
 
         It *does*, however, dispatch to tiled or direct read based on plane size.
         (Note: users have full power to control tiling via slicing into LazyBioArray,
@@ -1088,16 +1221,17 @@ class BioFile(Sequence[Series]):
 
         if plane_bytes > MAX_JAVA_ARRAY_SIZE:
             return self._read_plane_tiled(
-                reader, meta, t, c, z, y_start, x_start, height, width
+                reader, meta, image_index, t, c, z, y_start, x_start, height, width
             )
         return self._read_plane_direct(
-            reader, meta, t, c, z, y_start, x_start, height, width
+            reader, meta, image_index, t, c, z, y_start, x_start, height, width
         )
 
     def _read_plane_direct(
         self,
         reader: IFormatReader,
         meta: CoreMetadata,
+        image_index: int,
         t: int,
         c: int,
         z: int,
@@ -1109,9 +1243,10 @@ class BioFile(Sequence[Series]):
         """Read plane directly (fast path for <2GB planes)."""
         n_rgb = meta.shape.rgb
         dtype = meta.dtype
-        idx = reader.getIndex(z, c, t)
-        java_buffer = reader.openBytes(idx, x_start, y_start, width, height)
-        im = np.frombuffer(memoryview(java_buffer), dtype)  # type: ignore
+        plane_idx = self._plane_index(image_index, z, c, t)
+        bounds = self._make_bounds(image_index, y_start, x_start, height, width)
+        plane = reader.openPlane(image_index, plane_idx, bounds)
+        im = np.frombuffer(memoryview(plane.getBytes()), dtype)  # type: ignore
         return _reshape_image_buffer(
             im,
             dtype=dtype,
@@ -1142,6 +1277,7 @@ class BioFile(Sequence[Series]):
         self,
         reader: IFormatReader,
         meta: CoreMetadata,
+        image_index: int,
         t: int,
         c: int,
         z: int,
@@ -1152,8 +1288,8 @@ class BioFile(Sequence[Series]):
     ) -> np.ndarray:
         """Read large plane via tiling to avoid 2GB Java array limit.
 
-        Key insight: openBytes() dominates time (~98%), so minimize tile count.
-        Strategy: Reuse one large buffer, read full-width rows, copy to output.
+        Strategy: read full-width row-bands via ``openPlane`` sub-regions (each band's
+        byte array stays under the Java limit) and copy them into the output array.
         """
         n_rgb = meta.shape.rgb
         dtype = meta.dtype
@@ -1164,39 +1300,20 @@ class BioFile(Sequence[Series]):
 
         # Calculate tile size
         tile_height = self._calculate_tile_height(meta, width)
-        row_bytes = width * dtype.itemsize * n_rgb
 
-        # Allocate buffer with fallback for OOM
-        # Key lesson: Heap size often limits us before theoretical 2GB limit
-        tile_buffer = None
-        min_tile_height = max(1, height // 100)
-        OutOfMemoryError = jimport("java.lang.OutOfMemoryError")
-        while tile_buffer is None and tile_height >= min_tile_height:
-            try:
-                tile_buffer = jpype.JArray(jpype.JByte)(tile_height * row_bytes)  # pyright: ignore[reportCallIssue]
-            except OutOfMemoryError as e:
-                tile_height //= 2
-                if tile_height < min_tile_height:
-                    gb = tile_height * row_bytes / 1024**3
-                    raise MemoryError(
-                        f"Cannot allocate {gb:.2f} GB tile buffer. "
-                        f"Set JAVA_TOOL_OPTIONS='-Xmx8g' to increase heap. Or further "
-                        "reduce tile size by setting the environment variable "
-                        "BIOFORMATS_MAX_JAVA_BYTES to a smaller value."
-                    ) from e
-
-        plane_idx = reader.getIndex(z, c, t)
+        plane_idx = self._plane_index(image_index, z, c, t)
 
         # Read tiles
         y_offset = 0
         for y0 in range(0, height, tile_height):
             h = min(tile_height, height - y0)
 
-            reader.openBytes(plane_idx, tile_buffer, x_start, y_start + y0, width, h)  # pyright: ignore[reportArgumentType]
+            bounds = self._make_bounds(image_index, y_start + y0, x_start, h, width)
+            plane = reader.openPlane(image_index, plane_idx, bounds)
 
             # Copy tile data (count is elements, not bytes)
             tile_data = np.frombuffer(
-                memoryview(tile_buffer),  # pyright: ignore[reportArgumentType]
+                memoryview(plane.getBytes()),  # pyright: ignore[reportArgumentType]
                 dtype=dtype,
                 count=h * width * n_rgb,
             ).copy()
@@ -1216,19 +1333,58 @@ class BioFile(Sequence[Series]):
 
         return output
 
-    _service: ClassVar[Any] = None
 
-    @classmethod
-    def _create_ome_meta(cls) -> Any:
-        """Create an OMEXMLMetadata object to populate."""
-        if cls._service is None:
-            ServiceFactory = jimport("loci.common.services.ServiceFactory")
-            OMEXMLService = jimport("loci.formats.services.OMEXMLService")
+def _bf_underlying_reader(java_metadata: Any) -> Any | None:
+    """Return the wrapped Bio-Formats ``IFormatReader``, if any.
 
-            factory = ServiceFactory()
-            cls._service = factory.getInstance(OMEXMLService)
+    Encapsulates all peeking into the Bio-Formats compatibility layer: only the
+    ``io.scif.bf.BioFormatsFormat$Metadata`` class exposes ``getReader()``. Native
+    SCIFIO formats return ``None``.
+    """
+    if java_metadata is None:  # pragma: no cover
+        return None
+    if "BioFormatsFormat" not in str(java_metadata.getClass().getName()):
+        return None
+    with suppress(Exception):
+        return java_metadata.getReader()
+    return None  # pragma: no cover
 
-        return cls._service.createOMEXMLMetadata()
+
+def _bf_resolution_counts(java_metadata: Any, image_count: int) -> list[int]:
+    """Group flat SCIFIO images into per-series resolution-level counts.
+
+    For Bio-Formats-backed metadata we peek the underlying reader's core-metadata
+    list, whose per-series first entry carries ``resolutionCount`` even when
+    resolutions are flattened into separate images. Anything else (native SCIFIO
+    formats) gets one resolution per image.
+    """
+    bf_reader = _bf_underlying_reader(java_metadata)
+    if bf_reader is not None:
+        with suppress(Exception):
+            core_list = bf_reader.getCoreMetadataList()
+            counts: list[int] = []
+            i = 0
+            n = int(core_list.size())
+            while i < n:
+                rc = max(1, int(core_list.get(i).resolutionCount))
+                counts.append(rc)
+                i += rc
+            if sum(counts) == image_count:
+                return counts
+    return [1] * image_count
+
+
+def _color_table_to_numpy(color_table: Any) -> np.ndarray:
+    """Convert an imglib2 ``ColorTable`` into an ``(N, components)`` numpy array."""
+    components = int(color_table.getComponentCount())
+    length = int(color_table.getLength())
+    # ColorTable8 values are 0-255; ColorTable16 are 0-65535. Use a width that fits.
+    dtype = np.uint8 if int(color_table.getBits()) <= 8 else np.uint16
+    out = np.empty((length, components), dtype=dtype)
+    for comp in range(components):
+        for i in range(length):
+            out[i, comp] = int(color_table.get(comp, i))
+    return out
 
 
 def _close_java_reader(java_reader: IFormatReader | None) -> None:

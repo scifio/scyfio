@@ -11,7 +11,7 @@ import jpype
 import pytest
 import scyjava
 
-from bffile import _biofile
+from scyfio import _biofile
 
 TEST_DATA = Path(__file__).parent / "data"
 if not TEST_DATA.exists() or not any(TEST_DATA.iterdir()):

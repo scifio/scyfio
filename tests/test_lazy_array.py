@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from bffile import BioFile, LazyBioArray
+from scyfio import BioFile, LazyBioArray
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -267,7 +267,7 @@ def test_tiled_vs_direct_read_consistency(
     Monkeypatch the MAX_JAVA_ARRAY_SIZE to a smaller value to force multiple tiles for
     small sample.
     """
-    import bffile._biofile as _biofile
+    import scyfio._biofile as _biofile
 
     monkeypatch.setattr(_biofile, "MAX_JAVA_ARRAY_SIZE", 2**16)
     with BioFile(simple_file) as bf:
@@ -275,8 +275,8 @@ def test_tiled_vs_direct_read_consistency(
         meta = bf.core_metadata(0, 0)
 
         height, width = meta.shape.y, meta.shape.x
-        direct = bf._read_plane_direct(reader, meta, 0, 0, 0, 0, 0, height, width)
-        tiled = bf._read_plane_tiled(reader, meta, 0, 0, 0, 0, 0, height, width)
+        direct = bf._read_plane_direct(reader, meta, 0, 0, 0, 0, 0, 0, height, width)
+        tiled = bf._read_plane_tiled(reader, meta, 0, 0, 0, 0, 0, 0, height, width)
         np.testing.assert_array_equal(direct, tiled)
 
 
@@ -293,10 +293,10 @@ def test_tiled_read_subregion(simple_file: Path) -> None:
         y_start, x_start = 5, 10
         height, width = 10, 10
         direct = bf._read_plane_direct(
-            reader, meta, 0, 0, 0, y_start, x_start, height, width
+            reader, meta, 0, 0, 0, 0, y_start, x_start, height, width
         )
         tiled = bf._read_plane_tiled(
-            reader, meta, 0, 0, 0, y_start, x_start, height, width
+            reader, meta, 0, 0, 0, 0, y_start, x_start, height, width
         )
         np.testing.assert_array_equal(direct, tiled)
 

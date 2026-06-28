@@ -12,11 +12,7 @@ from ._java_stuff import start_jvm
 
 if TYPE_CHECKING:
     import java.lang
-    from loci.common.services import ServiceFactory
-    from loci.formats import FormatTools, ImageReader, Memoizer, Modulo
-    from loci.formats.in_ import DynamicMetadataOptions
-    from loci.formats.ome import OMEPyramidStore
-    from loci.formats.services import OMEXMLService
+    from loci.formats import Modulo
     from ome.units.quantity import Quantity as OMEQuantity
     from pint.facets.plain import PlainQuantity
 
@@ -82,30 +78,6 @@ def jimport(
 def jimport(
     classname: Literal["ome.units.quantity.Quantity"],
 ) -> type[Quantity]: ...
-@overload
-def jimport(
-    classname: Literal["loci.formats.ome.OMEPyramidStore"],
-) -> type[OMEPyramidStore]: ...
-@overload
-def jimport(
-    classname: Literal["loci.formats.in_.DynamicMetadataOptions"],
-) -> type[DynamicMetadataOptions]: ...
-@overload
-def jimport(
-    classname: Literal["loci.formats.FormatTools"],
-) -> type[FormatTools]: ...
-@overload
-def jimport(
-    classname: Literal["loci.formats.services.OMEXMLService"],
-) -> type[OMEXMLService]: ...
-@overload
-def jimport(
-    classname: Literal["loci.common.services.ServiceFactory"],
-) -> type[ServiceFactory]: ...
-@overload
-def jimport(classname: Literal["loci.formats.ImageReader"]) -> type[ImageReader]: ...
-@overload
-def jimport(classname: Literal["loci.formats.Memoizer"]) -> type[Memoizer]: ...
 @overload
 def jimport(classname: str) -> Any: ...
 def jimport(classname: str) -> Any:

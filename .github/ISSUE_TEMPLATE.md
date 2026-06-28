@@ -1,4 +1,4 @@
-* bffile version:
+* scyfio version:
 * Python version:
 * Operating System:
 

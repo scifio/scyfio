@@ -1,6 +1,15 @@
 # Tips for Claude and LLM Agents
 
-This repo wraps the Bio-Formats Java library.
+This repo (`scyfio`) wraps the **SCIFIO** Java library (`io.scif`) via
+`scyjava`/JPype, exposing a numpy/zarr/dask/xarray-friendly `BioFile` API. It is a
+fork of the `bffile` project (which wrapped Bio-Formats directly); the Python data
+layers (`_lazy_array`, `_zarr`, dask/xarray) are unchanged and ride on the
+`core_metadata()` / `read_plane()` contract.
+
+SCIFIO reaches Bio-Formats' full format coverage through **`scifio-bf-compat`**, which
+adapts every Bio-Formats reader into a SCIFIO `Format`. So ND2/CZI/SVS/etc. still open —
+through SCIFIO's axis-based API — while native formats (TIFF, GIF, …) use SCIFIO's own
+readers.
 
 ## Testing tips
 
@@ -10,118 +19,60 @@ You can use `-n` to run in parallel:
 uv run pytest -n 6
 ```
 
-## Understanding the underlying Java codebase
+Test data is fetched on first run via `scripts/fetch_test_data.py` into `tests/data/`.
 
-When you need to understand the underlying Java implementation details,
-you can clone it locally if it's not already here:
+## Maven endpoints / JVM
 
-```bash
-git clone https://github.com/ome/bioformats
-cd bioformats
-```
+Configured in `src/scyfio/_java_stuff.py`:
+- `io.scif:scifio-bf-compat:4.1.1` (pulls scifio + scifio-ome-xml + formats-api)
+- `ome:formats-gpl:6.10.1` (the actual Bio-Formats readers)
+- `ch.qos.logback:logback-classic:1.3.15`
 
-### Directory Structure
+These resolve via the **scijava.public** Maven repo, not Maven Central. Override with
+`SCIFIO_VERSION` / `FORMATS_VERSION` env vars. `get_scifio()` returns a cached
+`io.scif.SCIFIO` context (the entry point for the reader initializer, translator
+service, and format service).
 
-The bioformats repo uses a multi-module structure under `components/`:
+## Understanding the underlying SCIFIO codebase
 
-```text
-bioformats/components/
-├── formats-api/          # Core API interfaces and base classes
-├── formats-bsd/          # BSD-licensed implementations
-├── formats-gpl/          # GPL-licensed implementations
-├── bio-formats-tools/    # Command-line tools
-├── bio-formats-plugins/  # ImageJ/Fiji plugins
-└── test-suite/           # Test files
-```
+Local clones live under `~/code/scifio/`:
+- `scifio/` — core API (`io.scif`)
+- `scifio-bf-compat/` — Bio-Formats compatibility layer (`io.scif.bf`)
+- `scifio-ome-xml/` — OME-XML translators/services (`io.scif.ome`)
+- `scifio-tutorials/` — worked examples of the SCIFIO API
 
-### Key Java Classes We Wrap
+### Key SCIFIO API (and how scyfio uses it)
 
-Here's exactly where each Java class used in `src/bffile/_biofile.py` is located:
+- **`io.scif.SCIFIO`** — context gateway. `scifio.initializer().initializeReader(loc,
+  config)` returns an `io.scif.Reader`. The path must be wrapped in
+  `org.scijava.io.location.FileLocation`, and a `io.scif.config.SCIFIOConfig` **must**
+  be passed (the no-config path uses name-only format detection, which fails for
+  content-detected formats like CZI → NullPointerException).
+- **`io.scif.Reader`** — `openPlane(imageIndex, planeIndex, Interval)` → `io.scif.Plane`
+  (`plane.getBytes()`). The `Interval` (`net.imglib2.FinalInterval.createMinSize(...)`)
+  must span ALL planar axes (X, Y, and any interleaved colour-sample axis). `planeIndex`
+  is a raster over the non-planar axes, computed via
+  `io.scif.util.FormatTools.positionToRaster`. Lifecycle: `close(boolean fileOnly)`,
+  `setSource`, `getCurrentLocation`. NB: a SCIFIO reader cannot reopen after
+  `close(fileOnly)` — `scyfio` re-initializes a fresh reader on resume (see
+  `BioFile._acquire_source`).
+- **`io.scif.Metadata` / `io.scif.ImageMetadata`** — `meta.get(imageIndex)` →
+  `ImageMetadata`; axes via `net.imagej.axis.Axes.{X,Y,Z,CHANNEL,TIME}`,
+  `getPlanarAxisCount`, `getAxes`, `getAxisLength`, `getPixelType`, `isLittleEndian`,
+  etc. Pixel types `io.scif.util.FormatTools.{INT8..DOUBLE}` (no `BIT`).
+- **Pyramids** — SCIFIO has no resolution concept; bf-compat flattens Bio-Formats
+  resolution levels into separate images. `scyfio` reconstructs `[series][resolution]`
+  by peeking the wrapped Bio-Formats reader's `getCoreMetadataList()` (the per-series
+  first entry keeps `resolutionCount`). All BF-peeking is encapsulated in
+  `_biofile._bf_underlying_reader` / `_bf_resolution_counts`; non-BF formats get
+  `resolution_count=1`.
+- **OME-XML** — produced by translation:
+  `scifio.translator().translate(meta, OMEMetadata, true)` then
+  `omexml.getRoot().dumpXML()` (see `BioFile.ome_xml`).
 
-#### 1. `loci.formats.ImageReader`
+### Where to look in the SCIFIO source
 
-- **Location**: `bioformats/components/formats-api/src/loci/formats/ImageReader.java`
-- **Purpose**: Master file format reader that auto-detects and delegates to specific format readers
-
-#### 2. `loci.formats.IFormatReader`
-
-- **Location**: `bioformats/components/formats-api/src/loci/formats/IFormatReader.java`
-- **Purpose**: Interface defining the reader contract
-- **Note**: This is the interface that `ImageReader` implements
-
-#### 3. `loci.formats.Memoizer`
-
-- **Location**: `bioformats/components/formats-bsd/src/loci/formats/Memoizer.java`
-- **Purpose**: Caching wrapper that serializes initialized readers to `.bfmemo` files
-- **How it works**: Wraps another reader and caches the initialized state after `setId()` to speed up subsequent opens
-- **Constructor we use**: `Memoizer(IFormatReader, long millisThreshold, Path memoDir)`
-
-#### 4. `loci.formats.in.DynamicMetadataOptions`
-
-- **Location**: `bioformats/components/formats-api/src/loci/formats/in/DynamicMetadataOptions.java`
-- **Purpose**: Configuration object for reader behavior
-- **Key method we use**: `set(String name, String value)` - Sets format-specific options
-- **Example usage**: `options={"nativend2.chunkmap": False}` to disable ND2 chunkmap reading
-
-#### 5. `loci.formats.services.OMEXMLService`
-
-- **Location**: `bioformats/components/formats-api/src/loci/formats/services/OMEXMLService.java`
-- **Purpose**: Service interface for creating and manipulating OME-XML metadata
-- **Key method we use**: `createOMEXMLMetadata()` - Creates metadata store for readers
-
-#### 6. `loci.formats.FormatTools`
-
-- **Location**: `bioformats/components/formats-api/src/loci/formats/FormatTools.java`
-- **Purpose**: Utility class with static helper methods
-- **What we use**: `VERSION` constant to get Bio-Formats version
-
-#### 7. `loci.common.services.ServiceFactory`
-
-- **Location**: ⚠️ **NOT in bioformats repo** - from separate `loci-common` dependency
-- **Purpose**: Factory pattern for creating service instances
-- **Documentation**: <https://downloads.openmicroscopy.org/bio-formats/latest/api/>
-
-### Underlying Implementation Details
-
-#### CoreMetadata Structure
-
-- **Location**: `bioformats/components/formats-api/src/loci/formats/CoreMetadata.java`
-- Contains: `sizeX`, `sizeY`, `sizeZ`, `sizeC`, `sizeT`, pixel type, RGB channel count, dimension order, etc.
-- We parse this in our `_core_metadata.py` module
-
-#### Reader Workflow
-
-1. **ImageReader** acts as a multiplexer - it maintains instances of all format-specific readers
-2. When `setId()` is called, it tests each reader until one accepts the file
-3. That specific reader becomes the active delegate for all subsequent operations
-4. **Memoizer** wraps this entire setup and caches the initialized state
-
-#### Key Java Package Structure
-
-```text
-loci.formats/              # Main reader API
-├── ImageReader            # Master reader
-├── IFormatReader          # Reader interface
-├── FormatReader           # Base implementation
-├── FormatTools            # Utilities
-├── CoreMetadata           # Metadata container
-├── Memoizer               # Caching (in formats-bsd)
-├── in/
-│   └── DynamicMetadataOptions  # Reader options
-└── services/
-    └── OMEXMLService      # OME metadata service
-
-loci.common/               # Separate dependency
-└── services/
-    └── ServiceFactory     # Service factory pattern
-```
-
-### Quick Reference for Finding Java Code
-
-When you need to understand the Java implementation:
-
-1. **Reader behavior**: Check `formats-api/src/loci/formats/FormatReader.java` for base implementation
-2. **Specific format readers**: Look in `formats-bsd/src/loci/formats/in/` (e.g., `ND2Reader.java`)
-3. **Metadata handling**: See `formats-api/src/loci/formats/CoreMetadata.java`
-4. **Caching logic**: Review `formats-bsd/src/loci/formats/Memoizer.java`
-5. **Options system**: Check `formats-api/src/loci/formats/in/DynamicMetadataOptions.java`
+- Reader/Metadata contracts: `scifio/src/main/java/io/scif/{Reader,Metadata,ImageMetadata}.java`
+- Pixel/index utilities: `scifio/src/main/java/io/scif/util/FormatTools.java`
+- bf-compat reader + resolution peeking: `scifio-bf-compat/src/main/java/io/scif/bf/BioFormatsFormat.java`
+- OME-XML translation: `scifio-ome-xml/src/main/java/io/scif/ome/`

@@ -3,14 +3,14 @@ title: Usage
 icon: lucide/book-open
 ---
 
-# Using `bffile`
+# Using `scyfio`
 
 ## Quick Start
 
-The simplest way to read an image is with [`imread`][bffile.imread]:
+The simplest way to read an image is with [`imread`][scyfio.imread]:
 
 ```python
-from bffile import imread
+from scyfio import imread
 
 data = imread("image.nd2")
 print(data.shape, data.dtype)
@@ -22,10 +22,10 @@ data = imread("image.nd2", series=1, resolution=0)
 
 This reads the specified series/resolution into memory as a numpy array with
 shape `(T, C, Z, Y, X)`. For most other use cases, you'll want more control —
-that's where [`BioFile`][bffile.BioFile] comes in.
+that's where [`BioFile`][scyfio.BioFile] comes in.
 
 ```python
-from bffile import BioFile
+from scyfio import BioFile
 
 with BioFile("image.nd2") as bf:
     arr = bf.as_array()       # lazy array accessor
@@ -47,7 +47,7 @@ For info on extracting data, see:
 
 ## Opening Files with BioFile
 
-[`BioFile`][bffile.BioFile] manages the lifecycle of the underlying Java reader and the
+[`BioFile`][scyfio.BioFile] manages the lifecycle of the underlying Java reader and the
 associated file handle. The recommended pattern is a context manager:
 
 ```python
@@ -77,7 +77,7 @@ bf.destroy()  # full cleanup (or let GC handle it)
     file is open while using those objects.
 
     ```python
-    from bffile import BioFile
+    from scyfio import BioFile
 
     with BioFile("image.nd2") as bf:
         arr = bf.as_array()
@@ -112,11 +112,11 @@ stateDiagram-v2
 
 | Transition | What happens |
 | --- | --- |
-| [`__init__()`][bffile.BioFile] | Creates the `BioFile` object but does not open the file or initialize the reader. |
-| [`open()`][bffile.BioFile.open] (first call) | Full initialization — format detection, header parsing (`setId` in Java). Slow. |
-| [`close()`][bffile.BioFile.close] | Releases the OS file handle but keeps all parsed state in memory. |
-| [`open()`][bffile.BioFile.open] (after `close()`) | Just reopens the file handle (`reopenFile` in Java). Fast. |
-| [`destroy()`][bffile.BioFile.destroy] / [`__exit__()`][bffile.BioFile.__exit__] | Full teardown — Java reader and all cached state released. |
+| [`__init__()`][scyfio.BioFile] | Creates the `BioFile` object but does not open the file or initialize the reader. |
+| [`open()`][scyfio.BioFile.open] (first call) | Full initialization — format detection, header parsing (`setId` in Java). Slow. |
+| [`close()`][scyfio.BioFile.close] | Releases the OS file handle but keeps all parsed state in memory. |
+| [`open()`][scyfio.BioFile.open] (after `close()`) | Just reopens the file handle (`reopenFile` in Java). Fast. |
+| [`destroy()`][scyfio.BioFile.destroy] / [`__exit__()`][scyfio.BioFile.__exit__] | Full teardown — Java reader and all cached state released. |
 
 `close()` is lightweight: metadata (via `core_metadata()`, `len()`,
 etc.) remains accessible while the file handle is released. This is
@@ -127,36 +127,6 @@ read more data later.
     The context manager (`with`) calls `destroy()` on exit — full cleanup.
     If you want the fast-reopen behavior, use explicit `open()` / `close()`
     calls instead.
-
-!!! question "Memoization"
-
-    **Memoization speeds up *future* calls to `open()`, from an uninitialized
-    state, even across different Python sessions.**
-
-    The [`memoize`][bffile.BioFile] parameter controls whether the
-    initialized reader state is cached to a `.bfmemo` file *on disk*. This can
-    improve performance for the `UNINITIALIZED → OPEN` transition (i.e., when the
-    java reader is fully initialized from scratch) for *subsequent* reads of the
-    same file in a new Python session, or after `destroy()` has been called.
-
-    ```python
-    # First open: full init + saves .bfmemo file to disk
-    with BioFile("image.nd2", memoize=True) as bf:
-        ...
-
-    # Subsequent opens are faster: loads from .bfmemo instead of re-parsing
-    with BioFile("image.nd2", memoize=True) as bf:
-        ...
-    ```
-
-    You *must* have `memoize=True` on both the initial open and subsequent
-    opens for this to work.
-
-    !!! info "BIOFORMATS_MEMO_DIR"
-        By default, the `.bfmemo` file is saved in the same directory as the
-        original image. You must have write permission to this directory.
-        You can change this with the `BIOFORMATS_MEMO_DIR` [environment
-        variable](#environment-variables).
 
 ## The Series Data Model
 
@@ -176,25 +146,25 @@ layers).
     └── ...
     ```
 
-### `bffile` is Stateless
+### `scyfio` is Stateless
 
 If you're familiar with the Bio-Formats Java API, you will be used
 to using `setSeries` to change the active series before following
 up with calls to read data or metadata.
 
-`bffile.BioFile` aims for a __stateless__ API: all methods that pertain to
+`scyfio.BioFile` aims for a __stateless__ API: all methods that pertain to
 a specific series or resolution level take an explicit
 `series` argument and an optional `resolution` level.  Omitting these
 arguments defaults to `series=0` and `resolution=0`.  As a convenience,
-`BioFile` also provides a [`Series`][bffile.Series] proxy object, described below.
+`BioFile` also provides a [`Series`][scyfio.Series] proxy object, described below.
 
 ### Accessing Series
 
-A [`Series`][bffile.Series] object is a lightweight proxy that pre-fills
+A [`Series`][scyfio.Series] object is a lightweight proxy that pre-fills
 the `series=` argument on all calls back to the parent
-[`BioFile`][bffile.BioFile]:
+[`BioFile`][scyfio.BioFile]:
 
-[`BioFile`][bffile.BioFile] implements `Sequence[bffile.Series]`, so you can
+[`BioFile`][scyfio.BioFile] implements `Sequence[scyfio.Series]`, so you can
 index, and iterate:
 
 ```python
@@ -233,8 +203,8 @@ with BioFile("image.nd2") as bf:
 ## Reading Data with LazyBioArray
 
 The recommended way to read pixel data is through
-[`LazyBioArray`][bffile.LazyBioArray], obtained via
-[`as_array()`][bffile.BioFile.as_array].  This object behaves like a numpy array
+[`LazyBioArray`][scyfio.LazyBioArray], obtained via
+[`as_array()`][scyfio.BioFile.as_array].  This object behaves like a numpy array
 but reads the minimal amount of data from disk when you index into it (including
 sub-plane/XY slicing).
 
@@ -318,8 +288,8 @@ max_proj = np.max(arr, axis=2)      # z-projection (reads all data)
 We support casting `LazyBioArray` to various third-party array types
 for interoperability with their ecosystems:
 
-- [`to_xarray()`][bffile.BioFile.to_xarray] → [`xarray.DataArray`](https://docs.xarray.dev/en/stable/user-guide/data-structures.html#dataarray)
-- [`to_zarr_store()`][bffile.BioFile.to_zarr_store] → [`zarr.abc.store.Store`](https://zarr.readthedocs.io/en/v3.1.2/user-guide/storage.html)
+- [`to_xarray()`][scyfio.BioFile.to_xarray] → [`xarray.DataArray`](https://docs.xarray.dev/en/stable/user-guide/data-structures.html#dataarray)
+- [`to_zarr_store()`][scyfio.BioFile.to_zarr_store] → [`zarr.abc.store.Store`](https://zarr.readthedocs.io/en/v3.1.2/user-guide/storage.html)
 - [`to_dask()`](#using-dask-for-lazy-computation) → [`dask.array.Array`](https://docs.dask.org/en/stable/array.html)
 
 You will find each of these methods on
@@ -363,7 +333,7 @@ with BioFile("image.nd2") as bf:
 
 ### Complete virtual OME-Zarr view
 
-The [`to_zarr_store()`][bffile.BioFile.to_zarr_store] method returns a
+The [`to_zarr_store()`][scyfio.BioFile.to_zarr_store] method returns a
 `zarr.Store` that can be passed to `zarr.open()`.   When you cast a
 complete `BioFile` to a zarr store, without specifying a series or resolution,
 __the returned store provides a virtual view of the entire file as a spec compliant
@@ -385,7 +355,7 @@ spec](https://ngff.openmicroscopy.org/specifications/0.5/index.html#bioformats2r
     not for high performance._
 
 ```python
-from bffile import open_ome_zarr_group
+from scyfio import open_ome_zarr_group
 import zarr
 
 ome_zarr = open_ome_zarr_group("image.nd2")
@@ -403,7 +373,7 @@ print(level0.shape, level0.dtype)
 
 ### Lazy computation with `dask`
 
-For computations over large datasets, [`BioFile.to_dask`][bffile.BioFile.to_dask]
+For computations over large datasets, [`BioFile.to_dask`][scyfio.BioFile.to_dask]
 wraps `LazyBioArray` in a dask array:
 
 ```python
@@ -434,16 +404,16 @@ with BioFile("image.nd2") as bf:
     ```sh
     pip install dask
 
-    # or, to get a version that we guarantee is compatible with bffile
+    # or, to get a version that we guarantee is compatible with scyfio
     # install the extra:
-    pip install bffile[dask]
+    pip install scyfio[dask]
     ```
 
 ## Metadata
 
 ### OME Metadata
 
-[`ome_metadata()`][bffile.BioFile.ome_metadata] returns a rich, structured
+[`ome_metadata()`][scyfio.BioFile.ome_metadata] returns a rich, structured
 [`ome_types.OME`][] object, with all of the metadata parsed and organized
 according to the OME data model.
 
@@ -459,8 +429,8 @@ with BioFile("image.nd2") as bf:
 
 ### Core Metadata
 
-[`core_metadata()`][bffile.BioFile.core_metadata] returns a
-[`CoreMetadata`][bffile.CoreMetadata] dataclass with `shape`, `dtype`, and
+[`core_metadata()`][scyfio.BioFile.core_metadata] returns a
+[`CoreMetadata`][scyfio.CoreMetadata] dataclass with `shape`, `dtype`, and
 acquisition flags for a given series/resolution:
 
 ```python
@@ -474,7 +444,7 @@ with BioFile("image.nd2") as bf:
 
 ### Global Metadata
 
-[`global_metadata()`][bffile.BioFile.global_metadata] returns
+[`global_metadata()`][scyfio.BioFile.global_metadata] returns
 reader/file-specific key/value pairs:
 
 ```python
@@ -488,10 +458,10 @@ with BioFile("image.nd2") as bf:
 You can query Bio-Formats for supported formats without opening a file:
 
 ```python
-from bffile import BioFile
+from scyfio import BioFile
 
-# Bio-Formats version
-print(BioFile.bioformats_version())  # "8.1.1"
+# SCIFIO version
+print(BioFile.scifio_version())  # "0.39.1"
 
 # all supported file extensions
 suffixes = BioFile.list_supported_suffixes()  # {"nd2", "czi", "tiff", ...}
@@ -505,8 +475,8 @@ for reader in BioFile.list_available_readers():
 
 | <div style="width: 130px;">Variable</div> | Description | <div style="width: 170px;">Default</div> |
 | -------- | ----------- | ------- |
-| `BIOFORMATS_VERSION` | Bio-Formats version or full Maven coordinate (e.g. `"7.0.0"` or `"ome:formats-gpl:7.0.0"`) | `"ome:formats-gpl:RELEASE"` |
-| `BIOFORMATS_MEMO_DIR` | Directory for `.bfmemo` cache files | same as file |
+| `SCIFIO_VERSION` | scifio-bf-compat version or full Maven coordinate | `"io.scif:scifio-bf-compat:4.1.1"` |
+| `FORMATS_VERSION` | Bio-Formats readers version or full Maven coordinate (e.g. `"6.10.1"` or `"ome:formats-gpl:6.10.1"`) | `"ome:formats-gpl:6.10.1"` |
 | `BFF_JAVA_VERSION` | Java version to use (e.g. `11`, `17`, `21`) | `11` |
 | `BFF_JAVA_VENDOR` | Java vendor (e.g. `zulu-jre`, `temurin`, `adoptium`) | `zulu-jre` |
 | `BFF_JAVA_FETCH` | Java fetch behavior: `always`, `never`, or `auto` (See [scyjava docs](https://github.com/scijava/scyjava?tab=readme-ov-file#bootstrap-a-java-installation)). | `always` |

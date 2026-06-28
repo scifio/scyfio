@@ -2,15 +2,15 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "bffile[dask,xarray]",
+#     "scyfio[dask,xarray]",
 #     "ndv[vispy,pyqt]",
 # ]
 #
 # [tool.uv.sources]
-# bffile = { path = "../" }
+# scyfio = { path = "../" }
 # ///
 """
-View microscopy files using bffile and ndv.
+View microscopy files using scyfio and ndv.
 
 Usage:
     uv run scripts/ndv_view.py <path_to_file> [options]
@@ -28,13 +28,13 @@ from pathlib import Path
 
 import ndv  # pyright: ignore[reportMissingImports]
 
-from bffile import BioFile, imread
+from scyfio import BioFile, imread
 
 
 def main() -> None:
-    """Open a microscopy file with bffile and display it with ndv.imshow()."""
+    """Open a microscopy file with scyfio and display it with ndv.imshow()."""
     parser = argparse.ArgumentParser(
-        description="View files using bffile and ndv",
+        description="View files using scyfio and ndv",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("file_path", type=Path, help="File to open")
@@ -80,7 +80,7 @@ def main() -> None:
         ndv.imshow(data)
 
     else:
-        # Open the file with bffile
+        # Open the file with scyfio
         with BioFile(args.file_path) as bf:
             if args.xarray:
                 data = bf.to_xarray(series=args.series, resolution=args.res)

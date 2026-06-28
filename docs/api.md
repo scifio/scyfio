@@ -4,7 +4,7 @@ icon: lucide/code
 
 # API Reference
 
-::: bffile
+::: scyfio
     options:
         summary:
             attributes: false

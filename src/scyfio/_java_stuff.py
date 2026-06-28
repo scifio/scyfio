@@ -12,7 +12,18 @@ import scyjava
 import scyjava.config
 from jpype.types import JString
 
-MAVEN_COORDINATE = "ome:formats-gpl:RELEASE"
+# SCIFIO is reached through scifio-bf-compat, which adapts every Bio-Formats reader
+# into a SCIFIO Format. We therefore load three endpoints:
+#   - io.scif:scifio-bf-compat  (pulls scifio + scifio-ome-xml + formats-api)
+#   - ome:formats-gpl           (the actual Bio-Formats readers; bf-compat only pulls
+#                                formats-api, not the reader implementations)
+#   - ch.qos.logback:logback-classic (logging backend; 1.3.x is the last Java-8 line)
+# These resolve via the scijava.public Maven repo (not Maven Central).
+SCIFIO_BF_COMPAT_COORDINATE = "io.scif:scifio-bf-compat:4.1.1"
+FORMATS_GPL_COORDINATE = "ome:formats-gpl:6.10.1"
+
+# Back-compat alias: some callers / tests still refer to MAVEN_COORDINATE.
+MAVEN_COORDINATE = SCIFIO_BF_COMPAT_COORDINATE
 
 # Configure Java constraints from environment variables
 # BFF_JAVA_VENDOR: Java vendor (e.g., "zulu-jre", "adoptium", "temurin")
@@ -33,26 +44,37 @@ if _bff_vendor or _bff_version:
         _kwargs["fetch"] = _bff_fetch
     scyjava.config.set_java_constraints(**_kwargs)
 
-# Check if the BIOFORMATS_VERSION environment variable is set
-# and if so, use it as the Maven coordinate
-if coord := os.getenv("BIOFORMATS_VERSION", ""):
-    # allow a single version number to be passed
-    if ":" not in coord and all(x.isdigit() for x in coord.split(".")):
-        # if the coordinate is just a version number, use the default group and artifact
-        coord = f"ome:formats-gpl:{coord}"
 
-    # ensure the coordinate is valid
-    if 2 > len(coord.split(":")) > 5:
+def _resolve_coordinate(value: str, default: str) -> str:
+    """Normalize a user-supplied Maven coordinate or bare version number."""
+    # allow a single version number to be passed (applied to the default artifact)
+    if ":" not in value and all(x.isdigit() for x in value.split(".") if x):
+        group, artifact, _ = default.split(":", 2)
+        return f"{group}:{artifact}:{value}"
+    if not 2 <= len(value.split(":")) <= 5:
         warnings.warn(
-            f"Invalid BIOFORMATS_VERSION env var: {coord!r}. "
+            f"Invalid Maven coordinate env var: {value!r}. "
             "Must be a valid maven coordinate with 2-5 elements. "
-            f"Using default {MAVEN_COORDINATE!r}",
+            f"Using default {default!r}",
             stacklevel=2,
         )
-    else:
-        MAVEN_COORDINATE = coord
+        return default
+    return value
 
-scyjava.config.endpoints.append(MAVEN_COORDINATE)
+
+# SCIFIO_VERSION overrides the scifio-bf-compat coordinate; FORMATS_VERSION overrides
+# the Bio-Formats readers. BIOFORMATS_VERSION is kept as a deprecated alias for the
+# latter so existing configuration keeps working.
+if _coord := os.getenv("SCIFIO_VERSION", ""):
+    SCIFIO_BF_COMPAT_COORDINATE = _resolve_coordinate(
+        _coord, SCIFIO_BF_COMPAT_COORDINATE
+    )
+    MAVEN_COORDINATE = SCIFIO_BF_COMPAT_COORDINATE
+if _coord := (os.getenv("FORMATS_VERSION") or os.getenv("BIOFORMATS_VERSION") or ""):
+    FORMATS_GPL_COORDINATE = _resolve_coordinate(_coord, FORMATS_GPL_COORDINATE)
+
+scyjava.config.endpoints.append(SCIFIO_BF_COMPAT_COORDINATE)
+scyjava.config.endpoints.append(FORMATS_GPL_COORDINATE)
 # NB: logback 1.3.x is the last version with Java 8 support!
 scyjava.config.endpoints.append("ch.qos.logback:logback-classic:1.3.15")
 
@@ -60,7 +82,7 @@ scyjava.config.endpoints.append("ch.qos.logback:logback-classic:1.3.15")
 
 # python-side logger
 
-LOGGER = logging.getLogger("bffile")
+LOGGER = logging.getLogger("scyfio")
 fmt = (
     "%(asctime)s.%(msecs)03d "  # timestamp with milliseconds
     "[%(levelname)-5s] "  # level, padded
@@ -112,6 +134,18 @@ def start_jvm() -> None:
     """Start the JVM if not already running."""
     scyjava.start_jvm()  # won't repeat if already running
     redirect_java_logging()
+
+
+@cache  # one shared SCIFIO context (a "lens" on a SciJava Context) per process
+def get_scifio() -> Any:
+    """Return a shared ``io.scif.SCIFIO`` context gateway.
+
+    The SCIFIO instance is the entry point for discovering Formats and creating
+    components (the reader initializer, the OME-XML translator service, the format
+    service). It is created once and reused for the life of the process.
+    """
+    start_jvm()
+    return scyjava.jimport("io.scif.SCIFIO")()
 
 
 def jtype_to_python(obj: Any) -> Any:

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bffile import BioFile
+from scyfio import BioFile
 
 if TYPE_CHECKING:
     from pathlib import Path

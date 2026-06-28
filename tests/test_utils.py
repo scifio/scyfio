@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from bffile._utils import (
+from scyfio._utils import (
     OMEShape,
     PhysicalPixelSizes,
     _chunk_by_tile_size,

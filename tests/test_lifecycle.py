@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from bffile import BioFile
+from scyfio import BioFile
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -105,17 +105,15 @@ def test_full_lifecycle(simple_file: Path) -> None:
     # OPEN -> SUSPENDED
     bf.close()
     _assert_suspended(bf)
-    assert bf._java_reader is reader_first
     assert bf.core_metadata() == meta_before
 
     # close() again is idempotent
     bf.close()
     _assert_suspended(bf)
 
-    # SUSPENDED -> OPEN (fast path)
+    # SUSPENDED -> OPEN (re-initializes a fresh reader)
     bf.open()
     _assert_open(bf)
-    assert bf._java_reader is reader_first
 
     # destroy() from OPEN -> UNINITIALIZED
     bf.destroy()
@@ -151,12 +149,11 @@ def test_context_manager(simple_file: Path) -> None:
         _assert_open(bf)
         reader_first = bf._java_reader
 
-        # close/open inside with block uses fast path
+        # close/open inside with block re-initializes the reader
         bf.close()
         _assert_suspended(bf)
         bf.open()
         _assert_open(bf)
-        assert bf._java_reader is reader_first
 
     _assert_uninitialized(bf)  # __exit__ destroys
 
@@ -212,41 +209,42 @@ def test_gc_finalizer(simple_file: Path) -> None:
     del bf
     gc.collect()
     assert reader_open is not None
-    assert reader_open.getCurrentFile() is None  # full cleanup
+    assert reader_open.getCurrentLocation() is None  # full cleanup
 
     # From SUSPENDED state
     bf = BioFile(simple_file)
     bf.open()
     reader_suspended = bf._java_reader
     assert reader_suspended is not None
-    bf.close()  # close(true) preserves currentId
-    assert reader_suspended.getCurrentFile() is not None
+    bf.close()  # close(true) preserves the current location
+    assert reader_suspended.getCurrentLocation() is not None
     del bf
     gc.collect()
-    assert reader_suspended.getCurrentFile() is None  # full cleanup
+    assert reader_suspended.getCurrentLocation() is None  # full cleanup
 
 
 # ---------------------------------------------------------------------------
-# Memoization interaction
+# Reader identity across the lifecycle
 # ---------------------------------------------------------------------------
 
 
-def test_memoize_lifecycle(simple_file: Path, memo_dir: Path) -> None:
-    """Memoizer bypassed on suspend/resume; only used for full re-init."""
-    bf = BioFile(simple_file, memoize=1)
+def test_reader_lifecycle(simple_file: Path) -> None:
+    """Suspend/resume and destroy/reopen both yield a working reader.
+
+    SCIFIO readers cannot reopen after ``close(fileOnly)``, so resuming
+    re-initializes a fresh reader (rather than reusing the suspended one).
+    """
+    bf = BioFile(simple_file)
     bf.open()
-    reader_first = bf._java_reader
 
-    # Suspend/resume: same reader, Memoizer not involved
+    # Suspend/resume: reads work again afterwards
     bf.close()
     bf.open()
-    assert bf._java_reader is reader_first
     _assert_open(bf)
 
-    # Destroy + reopen: new reader (may load from memo file)
+    # Destroy + reopen
     bf.destroy()
     bf.open()
-    assert bf._java_reader is not reader_first
     _assert_open(bf)
 
     bf.destroy()
