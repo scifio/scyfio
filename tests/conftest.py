@@ -120,15 +120,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 @pytest.fixture(autouse=True, scope="session")
-def memo_dir(request: pytest.FixtureRequest) -> Iterator[Path | None]:
-    """Ensure we test on a clean cache, and don't pollute the user's cache."""
-    tmp_path = Path(tempfile.mkdtemp())
-    atexit.register(lambda: shutil.rmtree(tmp_path, ignore_errors=True))
-    _biofile.BIOFORMATS_MEMO_DIR = tmp_path / "memo"
-    yield tmp_path
-
-
-@pytest.fixture(autouse=True, scope="session")
 def cache_dirs(request: pytest.FixtureRequest) -> Iterator[Path | None]:
     """Ensure we test on a clean cache, and don't pollute the user's cache."""
 

@@ -61,14 +61,6 @@ class ReaderInfo:
     is_gpl: bool
 
 
-# by default, .bfmemo files will go into the same directory as the file.
-# users can override this with BIOFORMATS_MEMO_DIR env var
-BIOFORMATS_MEMO_DIR: Path | None = None
-_BFDIR = os.getenv("BIOFORMATS_MEMO_DIR")
-if _BFDIR:
-    BIOFORMATS_MEMO_DIR = Path(_BFDIR).expanduser().absolute()
-    BIOFORMATS_MEMO_DIR.mkdir(exist_ok=True, parents=True)
-
 # Java byte array size limit: 2^31 - 8 (leaves room for array header)
 # Bio-Formats will fail with "Array size too large" if we exceed this.
 # Key insight: This is a HARD limit in Java - can't be increased without JVM changes.
