@@ -29,7 +29,7 @@ from pathlib import Path
 
 import napari  # pyright: ignore[reportMissingImports]
 
-from scyfio import BioFile, imread
+from scyfio import ImageFile, imread
 from scyfio._utils import physical_pixel_sizes  # don't use, not public
 
 
@@ -94,7 +94,7 @@ def main() -> None:
 
     else:
         # Open the file with scyfio
-        bf = BioFile(args.file_path).open()
+        bf = ImageFile(args.file_path).open()
         meta = bf.core_metadata(series=args.series)
         method = bf.to_dask if args.dask else bf.as_array
         res_count = meta.resolution_count

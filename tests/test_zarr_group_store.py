@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from scyfio import BioFile
+from scyfio import ImageFile
 from scyfio._imread import open_ome_zarr_group
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ TEST_DATA = Path(__file__).parent / "data"
 
 def test_to_zarr_basic(simple_file: Path) -> None:
     """Test basic group store creation."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         store = bf.to_zarr_store()
         assert store is not None
         assert store.supports_listing
@@ -35,7 +35,7 @@ def test_to_zarr_basic(simple_file: Path) -> None:
 
 def test_root_metadata(simple_file: Path) -> None:
     """Test root group metadata structure (NGFF v0.5)."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         store = bf.to_zarr_store()
         # Get root metadata
 
@@ -53,7 +53,7 @@ def test_root_metadata(simple_file: Path) -> None:
 
 def test_ome_metadata(simple_file: Path) -> None:
     """Test OME group metadata (NGFF v0.5)."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         store = bf.to_zarr_store()
 
         # Test OME group metadata
@@ -75,7 +75,7 @@ def test_ome_metadata(simple_file: Path) -> None:
 
 def test_ome_xml_metadata(simple_file: Path) -> None:
     """Test OME-XML metadata file."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         store = bf.to_zarr_store()
 
         # Get OME-XML
@@ -91,7 +91,7 @@ def test_ome_xml_metadata(simple_file: Path) -> None:
 
 def test_series_metadata(simple_file: Path) -> None:
     """Test series/multiscales group metadata (NGFF v0.5)."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         store = bf.to_zarr_store()
 
         # Test first series metadata (which IS the multiscales group)
@@ -108,7 +108,7 @@ def test_series_metadata(simple_file: Path) -> None:
 
 def test_multiscales_metadata(simple_file: Path) -> None:
     """Test multiscales group metadata (NGFF v0.5)."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         store = bf.to_zarr_store()
 
         # Get multiscales metadata (series group IS multiscales in v0.5)
@@ -211,7 +211,7 @@ def test_multi_resolution(pyramid_file: Path) -> None:
 
 def test_invalid_keys_return_none_and_false(simple_file: Path) -> None:
     """Malformed or out-of-range keys should not raise from get()/exists()."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         store = bf.to_zarr_store()
         proto = default_buffer_prototype()
 
@@ -232,7 +232,7 @@ def test_invalid_keys_return_none_and_false(simple_file: Path) -> None:
 def test_output_valid_zarr(any_file: Path, tmp_path: Path) -> None:
     """Test that the output can be read by zarr and matches expected data."""
     dest = tmp_path / "example.ome.zarr"
-    with BioFile(any_file) as biofile:
+    with ImageFile(any_file) as biofile:
         arr = biofile.as_array()
         if arr.nbytes > 2_000_000_000:  # Skip arrays > 2GB
             pytest.skip(f"Array too large ({arr.nbytes / 1e9:.2f} GB)")

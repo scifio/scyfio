@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from ._biofile import BioFile
+from ._image_file import ImageFile
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,7 +19,7 @@ def imread(path: str | Path, *, series: int = 0, resolution: int = 0) -> np.ndar
 
     Convenience function that opens a file, reads the specified series into
     memory, and returns it as a numpy array. For more control over reading
-    (lazy loading, sub-regions, etc.), use BioFile directly.
+    (lazy loading, sub-regions, etc.), use ImageFile directly.
 
     Parameters
     ----------
@@ -48,9 +48,9 @@ def imread(path: str | Path, *, series: int = 0, resolution: int = 0) -> np.ndar
 
     See Also
     --------
-    BioFile : For lazy loading and more control over reading
+    ImageFile : For lazy loading and more control over reading
     """
-    with BioFile(path) as bf:
+    with ImageFile(path) as bf:
         arr = bf.as_array(series=series, resolution=resolution)
         return np.asarray(arr)
 
@@ -105,7 +105,7 @@ def open_zarr_array(
     except ImportError:
         raise ImportError("zarr must be installed to use open_zarr_array") from None
 
-    with BioFile(path).ensure_open() as bf:
+    with ImageFile(path).ensure_open() as bf:
         store = bf.as_array(series=series, resolution=resolution).to_zarr_store(
             rgb_as_channels=rgb_as_channels
         )
@@ -142,6 +142,6 @@ def open_ome_zarr_group(
     except ImportError:
         raise ImportError("zarr must be installed to use open_ome_zarr_group") from None
 
-    with BioFile(path).ensure_open() as bf:
+    with ImageFile(path).ensure_open() as bf:
         store = bf.to_zarr_store()
     return zarr.open_group(store, mode="r")

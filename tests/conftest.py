@@ -11,7 +11,7 @@ import jpype
 import pytest
 import scyjava
 
-from scyfio import _biofile
+from scyfio import _image_file
 
 TEST_DATA = Path(__file__).parent / "data"
 if not TEST_DATA.exists() or not any(TEST_DATA.iterdir()):
@@ -70,10 +70,10 @@ def small_test_file(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.fixture
-def opened_biofile(
+def opened_image_file(
     request: pytest.FixtureRequest, simple_file: Path
-) -> Iterator[_biofile.BioFile]:
-    """Pre-opened BioFile instance for convenience in tests.
+) -> Iterator[_image_file.ImageFile]:
+    """Pre-opened ImageFile instance for convenience in tests.
 
     Uses simple_file by default, or parametrized with all files via --exhaustive.
     """
@@ -83,7 +83,7 @@ def opened_biofile(
     else:
         file_path = simple_file
 
-    bf = _biofile.BioFile(file_path)
+    bf = _image_file.ImageFile(file_path)
     bf.open()
     yield bf
     bf.close()
@@ -152,12 +152,12 @@ def cache_dirs(request: pytest.FixtureRequest) -> Iterator[Path | None]:
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    """Dynamically parametrize opened_biofile based on --exhaustive flag."""
-    if "opened_biofile" in metafunc.fixturenames:
+    """Dynamically parametrize opened_image_file based on --exhaustive flag."""
+    if "opened_image_file" in metafunc.fixturenames:
         if metafunc.config.getoption("--exhaustive"):
             # Parametrize with all data files
             metafunc.parametrize(
-                "opened_biofile",
+                "opened_image_file",
                 DATA_FILES,
                 indirect=True,
                 ids=lambda x: x.name,

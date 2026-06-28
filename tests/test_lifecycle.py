@@ -1,4 +1,4 @@
-"""Tests for BioFile lifecycle: open / close / destroy state transitions."""
+"""Tests for ImageFile lifecycle: open / close / destroy state transitions."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from scyfio import BioFile
+from scyfio import ImageFile
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _assert_uninitialized(bf: BioFile) -> None:
-    """Assert BioFile is in UNINITIALIZED state."""
+def _assert_uninitialized(bf: ImageFile) -> None:
+    """Assert ImageFile is in UNINITIALIZED state."""
     assert bf.closed
     assert bf._java_reader is None
     assert bf._core_meta_list is None
@@ -23,8 +23,8 @@ def _assert_uninitialized(bf: BioFile) -> None:
     assert bf._finalizer is None
 
 
-def _assert_open(bf: BioFile) -> None:
-    """Assert BioFile is in OPEN state and can read data."""
+def _assert_open(bf: ImageFile) -> None:
+    """Assert ImageFile is in OPEN state and can read data."""
     assert not bf.closed
     assert not bf.suspended
     assert bf._java_reader is not None
@@ -33,8 +33,8 @@ def _assert_open(bf: BioFile) -> None:
     assert isinstance(plane, np.ndarray)
 
 
-def _assert_suspended(bf: BioFile) -> None:
-    """Assert BioFile is SUSPENDED: file handles closed, but reads still work.
+def _assert_suspended(bf: ImageFile) -> None:
+    """Assert ImageFile is SUSPENDED: file handles closed, but reads still work.
 
     A read on a suspended file transparently re-acquires the source (scyfio
     re-initializes the SCIFIO reader), so reads work even when suspended. Metadata
@@ -61,8 +61,8 @@ def _assert_suspended(bf: BioFile) -> None:
 
 
 def test_uninitialized(simple_file: Path) -> None:
-    """BioFile starts UNINITIALIZED; all operations fail; close/destroy no-op."""
-    bf = BioFile(simple_file)
+    """ImageFile starts UNINITIALIZED; all operations fail; close/destroy no-op."""
+    bf = ImageFile(simple_file)
     _assert_uninitialized(bf)
 
     for method in (
@@ -90,7 +90,7 @@ def test_uninitialized(simple_file: Path) -> None:
 
 def test_full_lifecycle(simple_file: Path) -> None:
     """Walk through every transition: open, close, reopen, destroy, reopen."""
-    bf = BioFile(simple_file)
+    bf = ImageFile(simple_file)
 
     # UNINITIALIZED -> OPEN
     result = bf.open()
@@ -143,7 +143,7 @@ def test_full_lifecycle(simple_file: Path) -> None:
 
 def test_context_manager(simple_file: Path) -> None:
     """with block opens on enter, destroys on exit, supports re-entry."""
-    bf = BioFile(simple_file)
+    bf = ImageFile(simple_file)
 
     # First context: open -> destroy
     with bf:
@@ -166,7 +166,7 @@ def test_context_manager(simple_file: Path) -> None:
 
 def test_ensure_open(simple_file: Path) -> None:
     """ensure_open() suspends (not destroys), restores state, allows re-entry."""
-    bf = BioFile(simple_file)
+    bf = ImageFile(simple_file)
 
     # Started closed -> ends suspended (vs direct context which destroys)
     with bf.ensure_open() as bf_inner:
@@ -204,7 +204,7 @@ def test_ensure_open(simple_file: Path) -> None:
 def test_gc_finalizer(simple_file: Path) -> None:
     """del bf triggers GC finalizer cleanup from both OPEN and SUSPENDED."""
     # From OPEN state
-    bf = BioFile(simple_file)
+    bf = ImageFile(simple_file)
     bf.open()
     reader_open = bf._java_reader
     del bf
@@ -213,7 +213,7 @@ def test_gc_finalizer(simple_file: Path) -> None:
     assert reader_open.getCurrentLocation() is None  # full cleanup
 
     # From SUSPENDED state
-    bf = BioFile(simple_file)
+    bf = ImageFile(simple_file)
     bf.open()
     reader_suspended = bf._java_reader
     assert reader_suspended is not None
@@ -235,7 +235,7 @@ def test_reader_lifecycle(simple_file: Path) -> None:
     SCIFIO readers cannot reopen after ``close(fileOnly)``, so resuming
     re-initializes a fresh reader (rather than reusing the suspended one).
     """
-    bf = BioFile(simple_file)
+    bf = ImageFile(simple_file)
     bf.open()
 
     # Suspend/resume: reads work again afterwards

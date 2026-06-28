@@ -1,4 +1,4 @@
-"""Test that BFF_JAVA_VERSION and BFF_JAVA_VENDOR environment variables work."""
+"""Test that SCYFIO_JAVA_VERSION and SCYFIO_JAVA_VENDOR environment variables work."""
 
 from __future__ import annotations
 
@@ -23,14 +23,14 @@ def test_java_constraints_unit(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unit test: verify env vars are correctly passed to scyjava.
 
     This is a fast unit test that mocks scyjava to verify that scyfio
-    correctly reads BFF_JAVA_* env vars and passes them to scyjava.
+    correctly reads SCYFIO_JAVA_* env vars and passes them to scyjava.
     """
     from unittest.mock import MagicMock, patch
 
     # Set up environment variables
-    monkeypatch.setenv("BFF_JAVA_VENDOR", "temurin")
-    monkeypatch.setenv("BFF_JAVA_VERSION", "17")
-    monkeypatch.setenv("BFF_JAVA_FETCH", "prefer")
+    monkeypatch.setenv("SCYFIO_JAVA_VENDOR", "temurin")
+    monkeypatch.setenv("SCYFIO_JAVA_VERSION", "17")
+    monkeypatch.setenv("SCYFIO_JAVA_FETCH", "prefer")
 
     # Mock scyjava.config before importing _java_stuff
     mock_config = MagicMock()
@@ -55,7 +55,7 @@ def test_java_constraints_unit(monkeypatch: pytest.MonkeyPatch) -> None:
     "vendor,version",
     [("", "17"), ("", "21"), ("adoptium", "17"), ("temurin", "21"), ("zulu-jre", "11")],
 )
-def test_bff_java_constraints_integration(vendor: str, version: str) -> None:
+def test_scyfio_java_constraints_integration(vendor: str, version: str) -> None:
     """Integration test: verify Java constraints work end-to-end.
 
     This is a slow integration test that downloads JDKs and JARs.
@@ -63,9 +63,9 @@ def test_bff_java_constraints_integration(vendor: str, version: str) -> None:
     """
     env = os.environ.copy()
 
-    # Remove BFF and Java-related variables
-    env.pop("BFF_JAVA_VENDOR", None)
-    env.pop("BFF_JAVA_VERSION", None)
+    # Remove scyfio and Java-related variables
+    env.pop("SCYFIO_JAVA_VENDOR", None)
+    env.pop("SCYFIO_JAVA_VERSION", None)
     env.pop("JAVA_HOME", None)
 
     # Clean PATH
@@ -74,11 +74,11 @@ def test_bff_java_constraints_integration(vendor: str, version: str) -> None:
         p for p in path_parts if "cjdk" not in p.lower() and "/java" not in p.lower()
     )
 
-    # Set requested BFF variables
+    # Set requested scyfio variables
     if vendor:
-        env["BFF_JAVA_VENDOR"] = vendor
+        env["SCYFIO_JAVA_VENDOR"] = vendor
     if version:
-        env["BFF_JAVA_VERSION"] = version
+        env["SCYFIO_JAVA_VERSION"] = version
 
     result = subprocess.run(
         [sys.executable, "-c", SCRIPT],

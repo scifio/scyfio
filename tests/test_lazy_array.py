@@ -1,4 +1,4 @@
-"""Test LazyBioArray indexing and numpy protocol."""
+"""Test LazyImageArray indexing and numpy protocol."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from scyfio import BioFile, LazyBioArray
+from scyfio import ImageFile, LazyImageArray
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,9 +24,9 @@ if TYPE_CHECKING:
     ],
 )
 def test_indexing_patterns(
-    opened_biofile: BioFile, indexing: tuple, squeezed_dims: int
+    opened_image_file: ImageFile, indexing: tuple, squeezed_dims: int
 ) -> None:
-    arr = opened_biofile.as_array()
+    arr = opened_image_file.as_array()
     if arr.nbytes > 1_000_000_000:  # Skip arrays > 1GB
         pytest.skip(f"Array too large ({arr.nbytes / 1e9:.2f} GB)")
     result = arr[indexing]
@@ -34,9 +34,9 @@ def test_indexing_patterns(
     assert result.ndim == expected_ndim
 
 
-def test_xy_subregion(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
-    meta = opened_biofile.core_metadata()
+def test_xy_subregion(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
+    meta = opened_image_file.core_metadata()
     nt, nc, nz, ny, nx = meta.shape[:5]
 
     # Only test subregion if image is large enough
@@ -50,8 +50,8 @@ def test_xy_subregion(opened_biofile: BioFile) -> None:
     assert subregion.shape == expected_shape
 
 
-def test_mixed_indexing(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
+def test_mixed_indexing(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
     if arr.nbytes > 1_000_000_000:  # Skip arrays > 1GB
         pytest.skip(f"Array too large ({arr.nbytes / 1e9:.2f} GB)")
 
@@ -61,8 +61,8 @@ def test_mixed_indexing(opened_biofile: BioFile) -> None:
     assert result.ndim == expected_ndim
 
 
-def test_numpy_array_conversion(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
+def test_numpy_array_conversion(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
     if arr.nbytes > 1_000_000_000:  # Skip arrays > 1GB
         pytest.skip(f"Array too large ({arr.nbytes / 1e9:.2f} GB)")
 
@@ -72,16 +72,16 @@ def test_numpy_array_conversion(opened_biofile: BioFile) -> None:
     assert np_arr.dtype == arr.dtype
 
 
-def test_numpy_operations(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
+def test_numpy_operations(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
     if arr.nbytes > 1_000_000_000:  # Skip arrays > 1GB
         pytest.skip(f"Array too large ({arr.nbytes / 1e9:.2f} GB)")
     max_proj = np.max(arr, axis=2)
     assert max_proj.ndim == arr.ndim - 1
 
 
-def test_fancy_indexing_not_supported(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
+def test_fancy_indexing_not_supported(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
     with pytest.raises(NotImplementedError, match="fancy indexing"):
         arr[[0, 1, 2]]
 
@@ -89,26 +89,26 @@ def test_fancy_indexing_not_supported(opened_biofile: BioFile) -> None:
         arr[np.array([0, 1, 2])]
 
 
-def test_step_not_supported(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
+def test_step_not_supported(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
     with pytest.raises(NotImplementedError, match="step != 1"):
         arr[::2]
 
 
-def test_empty_slice(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
+def test_empty_slice(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
     result = arr[0:0, :, :]
     assert result.shape[0] == 0
 
 
-def test_index_out_of_bounds(opened_biofile: BioFile) -> None:
-    arr = opened_biofile.as_array()
+def test_index_out_of_bounds(opened_image_file: ImageFile) -> None:
+    arr = opened_image_file.as_array()
     with pytest.raises(IndexError):
         arr[1000, 0, 0]
 
 
 def test_shape_size_dtype_ndim_properties(simple_file: Path) -> None:
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         arr = bf.as_array()
         assert isinstance(arr.shape, tuple)
         assert isinstance(arr.size, int)
@@ -118,18 +118,18 @@ def test_shape_size_dtype_ndim_properties(simple_file: Path) -> None:
 
 
 def test_repr(simple_file: Path) -> None:
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         arr = bf.as_array()
         repr_str = repr(arr)
-        assert "LazyBioArray" in repr_str
+        assert "LazyImageArray" in repr_str
         assert "shape=" in repr_str
         assert "dtype=" in repr_str
 
 
-def test_conditional_dimension_slicing(opened_biofile: BioFile) -> None:
+def test_conditional_dimension_slicing(opened_image_file: ImageFile) -> None:
     """Test slicing along dimensions that exist."""
-    arr = opened_biofile.as_array()
-    meta = opened_biofile.core_metadata()
+    arr = opened_image_file.as_array()
+    meta = opened_image_file.core_metadata()
     nt, nc, nz = meta.shape.t, meta.shape.c, meta.shape.z
 
     # Only test multi-timepoint slicing if nt > 1
@@ -148,9 +148,9 @@ def test_conditional_dimension_slicing(opened_biofile: BioFile) -> None:
         assert result.shape[0] == nz
 
 
-def test_partial_key_indexing(opened_biofile: BioFile) -> None:
+def test_partial_key_indexing(opened_image_file: ImageFile) -> None:
     """Test indexing with fewer dimensions than array has."""
-    arr = opened_biofile.as_array()
+    arr = opened_image_file.as_array()
     if arr.nbytes > 1_000_000_000:  # Skip arrays > 1GB
         pytest.skip(f"Array too large ({arr.nbytes / 1e9:.2f} GB)")
 
@@ -160,9 +160,9 @@ def test_partial_key_indexing(opened_biofile: BioFile) -> None:
     assert result.ndim == expected_ndim
 
 
-def test_dimension_squeezing(opened_biofile: BioFile) -> None:
+def test_dimension_squeezing(opened_image_file: ImageFile) -> None:
     """Test that integer indexing properly squeezes dimensions."""
-    arr = opened_biofile.as_array()
+    arr = opened_image_file.as_array()
 
     if arr.is_rgb:
         # 6D → 3D by fixing T, C, Z (leaves Y, X, RGB)
@@ -175,14 +175,14 @@ def test_dimension_squeezing(opened_biofile: BioFile) -> None:
         assert plane.ndim == 2
 
 
-def test_lazy_vs_numpy_single_plane(opened_biofile: BioFile) -> None:
+def test_lazy_vs_numpy_single_plane(opened_image_file: ImageFile) -> None:
     """Verify lazy array returns same data as direct numpy conversion."""
-    arr = opened_biofile.as_array()
-    meta = opened_biofile.core_metadata()
+    arr = opened_image_file.as_array()
+    meta = opened_image_file.core_metadata()
 
     # Use lower resolution for pyramid files to avoid 2GB limit
     if meta.resolution_count > 1:
-        arr = opened_biofile.as_array(resolution=1)
+        arr = opened_image_file.as_array(resolution=1)
 
     # Skip if plane would be too large (>100MB to keep test fast)
     frame_size = meta.shape.y * meta.shape.x * meta.shape.rgb
@@ -200,10 +200,10 @@ def test_lazy_vs_numpy_single_plane(opened_biofile: BioFile) -> None:
     assert np.array_equal(lazy_plane, numpy_plane)
 
 
-def test_lazy_vs_numpy_subregion(opened_biofile: BioFile) -> None:
+def test_lazy_vs_numpy_subregion(opened_image_file: ImageFile) -> None:
     """Verify subregion reads match numpy."""
-    arr = opened_biofile.as_array()
-    meta = opened_biofile.core_metadata()
+    arr = opened_image_file.as_array()
+    meta = opened_image_file.core_metadata()
     ny, nx = meta.shape.y, meta.shape.x
 
     # Skip if image too small or too large
@@ -230,7 +230,7 @@ def test_lazy_vs_numpy_subregion(opened_biofile: BioFile) -> None:
 
 def test_multi_series_independence(multiseries_file) -> None:
     """Critical: Verify interleaved reads from multiple series don't corrupt data."""
-    with BioFile(multiseries_file) as bf:
+    with ImageFile(multiseries_file) as bf:
         # Get ground truth for both series
         truth_s0 = np.asarray(bf.as_array(series=0))
         truth_s1 = np.asarray(bf.as_array(series=1))
@@ -250,7 +250,7 @@ def test_multi_series_independence(multiseries_file) -> None:
 
 def test_tile_height_calculation(simple_file: Path) -> None:
     """Test that tile height calculation respects Java limit."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         meta = bf.core_metadata(0, 0)
 
         tile_height = bf._calculate_tile_height(meta, meta.shape.x)
@@ -267,10 +267,10 @@ def test_tiled_vs_direct_read_consistency(
     Monkeypatch the MAX_JAVA_ARRAY_SIZE to a smaller value to force multiple tiles for
     small sample.
     """
-    import scyfio._biofile as _biofile
+    import scyfio._image_file as _image_file
 
-    monkeypatch.setattr(_biofile, "MAX_JAVA_ARRAY_SIZE", 2**16)
-    with BioFile(simple_file) as bf:
+    monkeypatch.setattr(_image_file, "MAX_JAVA_ARRAY_SIZE", 2**16)
+    with ImageFile(simple_file) as bf:
         reader = bf._ensure_java_reader()
         meta = bf.core_metadata(0, 0)
 
@@ -282,7 +282,7 @@ def test_tiled_vs_direct_read_consistency(
 
 def test_tiled_read_subregion(simple_file: Path) -> None:
     """Test that tiled reads work correctly for subregions."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         reader = bf._ensure_java_reader()
         meta = bf.core_metadata(0, 0)
 
@@ -313,7 +313,7 @@ def test_tiled_read_subregion(simple_file: Path) -> None:
     ],
 )
 def test_lazy_view_compositions(
-    opened_biofile: BioFile,
+    opened_image_file: ImageFile,
     ops: tuple[slice | int, ...],
     direct: tuple[slice | int, ...] | slice | int,
     min_t: int,
@@ -321,8 +321,8 @@ def test_lazy_view_compositions(
     min_z: int,
 ) -> None:
     """Composed lazy indexing matches direct indexing for common patterns."""
-    arr = opened_biofile.as_array()
-    meta = opened_biofile.core_metadata()
+    arr = opened_image_file.as_array()
+    meta = opened_image_file.core_metadata()
 
     if arr.nbytes > 100_000_000:
         pytest.skip("Array too large")
@@ -333,7 +333,7 @@ def test_lazy_view_compositions(
     view = arr
     for index in ops:
         view = view[index]
-        if isinstance(view, LazyBioArray):
+        if isinstance(view, LazyImageArray):
             assert view.ndim <= arr.ndim
 
     composed = np.asarray(view)
@@ -343,7 +343,7 @@ def test_lazy_view_compositions(
 
 def test_rgb_index_composition_uses_parent_bounds(rgb_file: Path) -> None:
     """Nested RGB indexing should compose with the parent RGB slice."""
-    with BioFile(rgb_file) as bf:
+    with ImageFile(rgb_file) as bf:
         arr = bf.as_array()
         meta = bf.core_metadata()
 
@@ -355,7 +355,7 @@ def test_rgb_index_composition_uses_parent_bounds(rgb_file: Path) -> None:
         composed = plane[..., 1:3][..., 0]
         assert composed.ndim == 2
 
-        assert isinstance(composed, LazyBioArray)
+        assert isinstance(composed, LazyImageArray)
         assert composed._bounds_tczyxs[5] == slice(1, 2)
         assert composed._squeezed_tczyxs[5]
 
@@ -378,7 +378,7 @@ def test_rgb_index_composition_uses_parent_bounds(rgb_file: Path) -> None:
 )
 def test_index_all_dimensions(simple_file: Path, rgb_file: Path, idx: tuple) -> None:
     """Regression: indexing all dimensions to a scalar must not raise IndexError."""
-    with BioFile(simple_file) as bf:
+    with ImageFile(simple_file) as bf:
         arr = bf.as_array()
         np_arr = np.asarray(arr)
         if len(idx) > arr.ndim:
@@ -390,7 +390,7 @@ def test_index_all_dimensions(simple_file: Path, rgb_file: Path, idx: tuple) -> 
             assert scalar.ndim == 0
             _ = scalar.item()  # should not raise
 
-    with BioFile(rgb_file) as bf:
+    with ImageFile(rgb_file) as bf:
         arr = bf.as_array()
         np_arr = np.asarray(arr)
         scalar = np.asarray(arr[idx])
@@ -401,19 +401,19 @@ def test_index_all_dimensions(simple_file: Path, rgb_file: Path, idx: tuple) -> 
             _ = scalar.item()  # should not raise
 
 
-def test_dimension_squeezing_composition(opened_biofile: BioFile) -> None:
+def test_dimension_squeezing_composition(opened_image_file: ImageFile) -> None:
     """Successive integer indexing squeezes dimensions as expected."""
-    arr = opened_biofile.as_array()
+    arr = opened_image_file.as_array()
 
     view = arr[0]
-    assert isinstance(view, LazyBioArray)
+    assert isinstance(view, LazyImageArray)
     assert view.ndim == arr.ndim - 1
 
     view = view[0]
-    assert isinstance(view, LazyBioArray)
+    assert isinstance(view, LazyImageArray)
     assert view.ndim == arr.ndim - 2
 
     view = view[0]
-    assert isinstance(view, LazyBioArray)
+    assert isinstance(view, LazyImageArray)
     expected_ndim = 3 if arr.is_rgb else 2
     assert view.ndim == expected_ndim

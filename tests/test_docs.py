@@ -55,7 +55,7 @@ def test_usage_docs(multiseries_file: Path) -> None:
         except Exception as e:
             raise RuntimeError(f"Error executing block {i}:\n{block}") from e
 
-        # After each block, reopen any BioFile that was closed by a context
+        # After each block, reopen any ImageFile that was closed by a context
         # manager exit, so that continuation snippets can use `bf` and `arr`.
         bf = ns.get("bf")
         if bf is not None and hasattr(bf, "closed") and bf.closed:

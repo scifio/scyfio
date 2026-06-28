@@ -13,9 +13,9 @@ backed by lazy data access.
 
 ### Features
 
-- [Full lazy indexing and slicing](./usage.md#reading-data-with-lazybioarray)
+- [Full lazy indexing and slicing](./usage.md#reading-data-with-lazyimagearray)
   (with no additional dependencis on dask/xarray/zarr) with
-  [`scyfio.LazyBioArray`][]
+  [`scyfio.LazyImageArray`][]
 - [Custom zarr store](./usage.md#complete-virtual-ome-zarr-view) presents files
   as complete multi-resolution OME-Zarr group
 - [Export to xarray
@@ -54,9 +54,9 @@ import scyfio
 data = scyfio.imread("path/to/file", series=0)
 
 # or use lazy access to load only what you need
-with scyfio.BioFile("path/to/file") as biofile:
+with scyfio.ImageFile("path/to/file") as img:
     # lazy series accessor
-    lazy_array = biofile[0].as_array()
+    lazy_array = img[0].as_array()
     # Load data into memory (T=0, C=1:4, Z=all, Y=100:200)
     data = lazy_array[0, 1:4, :, 100:200]
 ```

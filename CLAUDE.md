@@ -1,7 +1,7 @@
 # Tips for Claude and LLM Agents
 
 This repo (`scyfio`) wraps the **SCIFIO** Java library (`io.scif`) via
-`scyjava`/JPype, exposing a numpy/zarr/dask/xarray-friendly `BioFile` API. It is a
+`scyjava`/JPype, exposing a numpy/zarr/dask/xarray-friendly `ImageFile` API. It is a
 fork of the `bffile` project (which wrapped Bio-Formats directly); the Python data
 layers (`_lazy_array`, `_zarr`, dask/xarray) are unchanged and ride on the
 `core_metadata()` / `read_plane()` contract.
@@ -55,7 +55,7 @@ Local clones live under `~/code/scifio/`:
   `io.scif.util.FormatTools.positionToRaster`. Lifecycle: `close(boolean fileOnly)`,
   `setSource`, `getCurrentLocation`. NB: a SCIFIO reader cannot reopen after
   `close(fileOnly)` — `scyfio` re-initializes a fresh reader on resume (see
-  `BioFile._acquire_source`).
+  `ImageFile._acquire_source`).
 - **`io.scif.Metadata` / `io.scif.ImageMetadata`** — `meta.get(imageIndex)` →
   `ImageMetadata`; axes via `net.imagej.axis.Axes.{X,Y,Z,CHANNEL,TIME}`,
   `getPlanarAxisCount`, `getAxes`, `getAxisLength`, `getPixelType`, `isLittleEndian`,
@@ -64,11 +64,11 @@ Local clones live under `~/code/scifio/`:
   resolution levels into separate images. `scyfio` reconstructs `[series][resolution]`
   by peeking the wrapped Bio-Formats reader's `getCoreMetadataList()` (the per-series
   first entry keeps `resolutionCount`). All BF-peeking is encapsulated in
-  `_biofile._bf_underlying_reader` / `_bf_resolution_counts`; non-BF formats get
+  `_image_file._bf_underlying_reader` / `_bf_resolution_counts`; non-BF formats get
   `resolution_count=1`.
 - **OME-XML** — produced by translation:
   `scifio.translator().translate(meta, OMEMetadata, true)` then
-  `omexml.getRoot().dumpXML()` (see `BioFile.ome_xml`).
+  `omexml.getRoot().dumpXML()` (see `ImageFile.ome_xml`).
 
 ### Where to look in the SCIFIO source
 

@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from scyfio import BioFile
+from scyfio import ImageFile
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
 def test_series_count(multiseries_file: Path) -> None:
-    with BioFile(multiseries_file) as bf:
+    with ImageFile(multiseries_file) as bf:
         meta_s0 = bf.core_metadata(series=0)
         meta_s1 = bf.core_metadata(series=1)
         meta_s2 = bf.core_metadata(series=2)
@@ -25,7 +25,7 @@ def test_series_count(multiseries_file: Path) -> None:
 
 
 def test_as_array_series_parameter(multiseries_file: Path) -> None:
-    with BioFile(multiseries_file) as bf:
+    with ImageFile(multiseries_file) as bf:
         arr_s0 = bf.as_array(series=0)
         arr_s1 = bf.as_array(series=1)
         assert arr_s0.shape is not None
@@ -33,26 +33,26 @@ def test_as_array_series_parameter(multiseries_file: Path) -> None:
 
 
 def test_core_meta_series_indexing(multiseries_file: Path) -> None:
-    with BioFile(multiseries_file) as bf:
+    with ImageFile(multiseries_file) as bf:
         meta_s0 = bf.core_metadata(series=0)
         meta_s1 = bf.core_metadata(series=1)
         assert meta_s0.shape != meta_s1.shape or True
 
 
 def test_series_out_of_bounds(multiseries_file: Path) -> None:
-    with BioFile(multiseries_file) as bf:
+    with ImageFile(multiseries_file) as bf:
         with pytest.raises(IndexError, match="out of range"):
             bf.core_metadata(series=100)
 
 
 def test_pyramid_resolution_count(pyramid_file: Path) -> None:
-    with BioFile(pyramid_file) as bf:
+    with ImageFile(pyramid_file) as bf:
         meta_r0 = bf.core_metadata(series=0, resolution=0)
         assert meta_r0.resolution_count >= 1
 
 
 def test_resolution_access(pyramid_file: Path) -> None:
-    with BioFile(pyramid_file) as bf:
+    with ImageFile(pyramid_file) as bf:
         meta = bf.core_metadata(series=0, resolution=0)
         if meta.resolution_count > 1:
             arr_r0 = bf.as_array(series=0, resolution=0)

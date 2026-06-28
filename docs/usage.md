@@ -22,12 +22,12 @@ data = imread("image.nd2", series=1, resolution=0)
 
 This reads the specified series/resolution into memory as a numpy array with
 shape `(T, C, Z, Y, X)`. For most other use cases, you'll want more control —
-that's where [`BioFile`][scyfio.BioFile] comes in.
+that's where [`ImageFile`][scyfio.ImageFile] comes in.
 
 ```python
-from scyfio import BioFile
+from scyfio import ImageFile
 
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     arr = bf.as_array()       # lazy array accessor
     plane = arr[0, 0, 2]      # indexing is just a view — no data read yet!
     data = np.asarray(plane)  # call np.asarray to read the data into memory
@@ -35,7 +35,7 @@ with BioFile("image.nd2") as bf:
 
 For info on extracting data, see:
 
-- [The `LazyBioArray` API](#reading-data-with-lazybioarray) for reading pixel
+- [The `LazyImageArray` API](#reading-data-with-lazyimagearray) for reading pixel
   data with lazy loading and sub-region slicing.
 - [Using as a zarr store](#complete-virtual-ome-zarr-view) for interoperability
   with the OME-Zarr ecosystem without file conversion.
@@ -45,13 +45,13 @@ For info on extracting data, see:
   DataArray](#labeled-dimensionscoordinates-with-xarray) which makes it easy to
   work with labeled dimensions and coordinates parsed from the OME metadata.
 
-## Opening Files with BioFile
+## Opening Files with ImageFile
 
-[`BioFile`][scyfio.BioFile] manages the lifecycle of the underlying Java reader and the
+[`ImageFile`][scyfio.ImageFile] manages the lifecycle of the underlying Java reader and the
 associated file handle. The recommended pattern is a context manager:
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     data = bf.read_plane()
 # reader fully cleaned up here
 ```
@@ -59,7 +59,7 @@ with BioFile("image.nd2") as bf:
 You can also manage the lifecycle explicitly:
 
 ```python
-bf = BioFile("image.nd2")
+bf = ImageFile("image.nd2")
 bf.open()
 # ... use bf ...
 bf.close()    # release file handle (fast reopen later)
@@ -70,16 +70,16 @@ bf.destroy()  # full cleanup (or let GC handle it)
 
 !!! danger "Critical: Some operations require an open file"
 
-    `BioFile` does *not* attempt to magically open/close files for you as needed.
-    However, some methods like [`as_array()`](#reading-data-with-lazybioarray) and
+    `ImageFile` does *not* attempt to magically open/close files for you as needed.
+    However, some methods like [`as_array()`](#reading-data-with-lazyimagearray) and
     [`to_dask()`](#using-dask-for-lazy-computation) return objects that require the
     file to be open when indexed or computed. You are responsible for ensuring the
     file is open while using those objects.
 
     ```python
-    from scyfio import BioFile
+    from scyfio import ImageFile
 
-    with BioFile("image.nd2") as bf:
+    with ImageFile("image.nd2") as bf:
         arr = bf.as_array()
 
     try:
@@ -90,15 +90,15 @@ bf.destroy()  # full cleanup (or let GC handle it)
 
 ### Understanding Lifecycle
 
-`BioFile` has three states:
+`ImageFile` has three states:
 
-1. `UNINITIALIZED`: The Python `BioFile` object exists, but the file handle is not open, and no Java resources are allocated.
+1. `UNINITIALIZED`: The Python `ImageFile` object exists, but the file handle is not open, and no Java resources are allocated.
 2. `OPEN`: The file is open and the Java reader is initialized. You can read data and metadata.
 3. `SUSPENDED`: The file handle is released but the Java reader and all parsed metadata remain in memory. You cannot read data, but you can still access metadata.  Re-opening the file from this state is fast.
 
 ``` mermaid
 ---
-title: BioFile Lifecycle
+title: ImageFile Lifecycle
 ---
 stateDiagram-v2
     direction LR
@@ -112,11 +112,11 @@ stateDiagram-v2
 
 | Transition | What happens |
 | --- | --- |
-| [`__init__()`][scyfio.BioFile] | Creates the `BioFile` object but does not open the file or initialize the reader. |
-| [`open()`][scyfio.BioFile.open] (first call) | Full initialization — format detection, header parsing (`initializeReader` in SCIFIO). Slow. |
-| [`close()`][scyfio.BioFile.close] | Releases the OS file handle but keeps all parsed metadata in memory. |
-| [`open()`][scyfio.BioFile.open] (after `close()`) | Re-acquires the source by re-initializing the reader (SCIFIO readers cannot reopen after a file-only close). |
-| [`destroy()`][scyfio.BioFile.destroy] / [`__exit__()`][scyfio.BioFile.__exit__] | Full teardown — Java reader and all cached state released. |
+| [`__init__()`][scyfio.ImageFile] | Creates the `ImageFile` object but does not open the file or initialize the reader. |
+| [`open()`][scyfio.ImageFile.open] (first call) | Full initialization — format detection, header parsing (`initializeReader` in SCIFIO). Slow. |
+| [`close()`][scyfio.ImageFile.close] | Releases the OS file handle but keeps all parsed metadata in memory. |
+| [`open()`][scyfio.ImageFile.open] (after `close()`) | Re-acquires the source by re-initializing the reader (SCIFIO readers cannot reopen after a file-only close). |
+| [`destroy()`][scyfio.ImageFile.destroy] / [`__exit__()`][scyfio.ImageFile.__exit__] | Full teardown — Java reader and all cached state released. |
 
 `close()` is lightweight: metadata (via `core_metadata()`, `len()`,
 etc.) remains accessible while the file handle is released. This is
@@ -137,7 +137,7 @@ layers).
 
 !!! info "Mental model"
     ```sh
-    BioFile                    # Container (usually a file, but possibly multiple)
+    ImageFile                    # Container (usually a file, but possibly multiple)
     ├── Series 0               # e.g., first field of view
     │   ├── Resolution 0       # full-resolution data
     │   └── Resolution 1       # downsampled pyramid level (if present)
@@ -152,23 +152,23 @@ If you're familiar with the SCIFIO or Bio-Formats Java API, you will be used
 to changing the active series/image (e.g. `setSeries`) before following
 up with calls to read data or metadata.
 
-`scyfio.BioFile` aims for a __stateless__ API: all methods that pertain to
+`scyfio.ImageFile` aims for a __stateless__ API: all methods that pertain to
 a specific series or resolution level take an explicit
 `series` argument and an optional `resolution` level.  Omitting these
 arguments defaults to `series=0` and `resolution=0`.  As a convenience,
-`BioFile` also provides a [`Series`][scyfio.Series] proxy object, described below.
+`ImageFile` also provides a [`Series`][scyfio.Series] proxy object, described below.
 
 ### Accessing Series
 
 A [`Series`][scyfio.Series] object is a lightweight proxy that pre-fills
 the `series=` argument on all calls back to the parent
-[`BioFile`][scyfio.BioFile]:
+[`ImageFile`][scyfio.ImageFile]:
 
-[`BioFile`][scyfio.BioFile] implements `Sequence[scyfio.Series]`, so you can
+[`ImageFile`][scyfio.ImageFile] implements `Sequence[scyfio.Series]`, so you can
 index, and iterate:
 
 ```python
-with BioFile("multi_scene.czi") as bf:
+with ImageFile("multi_scene.czi") as bf:
     print(len(bf))         # number of series
 
     s = bf[0]              # first series
@@ -184,35 +184,35 @@ with BioFile("multi_scene.czi") as bf:
         print(series.shape, series.dtype)
 ```
 
-`Series` objects also have methods that mirror those on `BioFile`, but with
+`Series` objects also have methods that mirror those on `ImageFile`, but with
 the `series` argument pre-filled:
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     s = bf[0]
     arr = s.as_array()         # same as bf.as_array(series=0)
     meta = s.core_metadata()   # same as bf.core_metadata(series=0)
 ```
 
 !!! danger "critical"
-    The `BioFile` [must be open](#understanding-lifecycle) while you use
+    The `ImageFile` [must be open](#understanding-lifecycle) while you use
     any `Series` objects obtained from it.  If you don't want to use the context
     manager, you should manage the lifecycle explicitly with `open()` and
     `close()`.
 
-## Reading Data with LazyBioArray
+## Reading Data with LazyImageArray
 
 The recommended way to read pixel data is through
-[`LazyBioArray`][scyfio.LazyBioArray], obtained via
-[`as_array()`][scyfio.BioFile.as_array].  This object behaves like a numpy array
+[`LazyImageArray`][scyfio.LazyImageArray], obtained via
+[`as_array()`][scyfio.ImageFile.as_array].  This object behaves like a numpy array
 but reads the minimal amount of data from disk when you index into it (including
 sub-plane/XY slicing).
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     arr = bf[0].as_array()  # no data read yet!
     print(arr)
-    # LazyBioArray(shape=(10, 2, 5, 512, 512), dtype=uint16, file='image.nd2')
+    # LazyImageArray(shape=(10, 2, 5, 512, 512), dtype=uint16, file='image.nd2')
 ```
 
 No data is loaded when you create the array. Indexing creates lazy views
@@ -220,30 +220,30 @@ _without reading data_. Data is read from disk only when you materialize the
 view with `np.asarray()` or numpy other operations:
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     arr = bf[0].as_array()  # no reading yet!
 
     # create a lazy view of a single plane (t=0, c=0, z=2)
-    plane_view = arr[0, 0, 2]              # LazyBioArray, shape: (512, 512)
+    plane_view = arr[0, 0, 2]              # LazyImageArray, shape: (512, 512)
     plane = np.asarray(plane_view)         # NOW data is read from disk
 
     # create lazy view of all timepoints for one channel and z-slice
-    timeseries_view = arr[:, 0, 2]         # LazyBioArray, shape: (10, 512, 512)
+    timeseries_view = arr[:, 0, 2]         # LazyImageArray, shape: (10, 512, 512)
     timeseries = np.asarray(timeseries_view)  # reads data
 
     # lazy view of a (100, 100) sub-region within the YX plane
     # in the third timepoint, for all channels, and the first z-slice
-    roi_view = arr[2, :, 0, 100:200, 50:150]  # LazyBioArray, shape: (2, 100, 100)
+    roi_view = arr[2, :, 0, 100:200, 50:150]  # LazyImageArray, shape: (2, 100, 100)
     roi = np.asarray(roi_view)             # only the requested pixels are read
 
     # materialize the full dataset
     full = np.asarray(arr)                 # shape: (10, 2, 5, 512, 512)
 ```
 
-LazyBioArray indexing creates lazy views with the following behavior:
+LazyImageArray indexing creates lazy views with the following behavior:
 
 - __Integer indexing__ squeezes that dimension: `arr[0, 0, 2]` returns a
-  LazyBioArray view with shape `(Y, X)` instead of `(1, 1, 1, Y, X)`.
+  LazyImageArray view with shape `(Y, X)` instead of `(1, 1, 1, Y, X)`.
 - __Slice indexing__ keeps the dimension: `arr[0:1, 0:1, 2:3]` returns a view
   with shape `(1, 1, 1, Y, X)`.
 - __Ellipsis__: `arr[..., 100:200, 50:150]` works as expected.
@@ -265,12 +265,12 @@ roi_view = arr[:, :, :, 200:300, 300:400]  # lazy view, no I/O yet
 roi = np.asarray(roi_view)  # reads only the 100x100 region from each plane
 ```
 
-This makes `LazyBioArray` well-suited for exploring large images without
+This makes `LazyImageArray` well-suited for exploring large images without
 loading everything into memory.
 
 ### Numpy integration
 
-`LazyBioArray` implements the `__array__` protocol, so you can pass it
+`LazyImageArray` implements the `__array__` protocol, so you can pass it
 directly to numpy functions:
 
 ```python
@@ -279,24 +279,24 @@ max_proj = np.max(arr, axis=2)      # z-projection (reads all data)
 ```
 
 !!! tip "Keep the file open"
-    The parent `BioFile` must remain open while you use `LazyBioArray`.
+    The parent `ImageFile` must remain open while you use `LazyImageArray`.
     Always use it inside the `with` block (or between explicit
     `open()`/`close()` calls).
 
 ## Third-party array types
 
-We support casting `LazyBioArray` to various third-party array types
+We support casting `LazyImageArray` to various third-party array types
 for interoperability with their ecosystems:
 
-- [`to_xarray()`][scyfio.BioFile.to_xarray] → [`xarray.DataArray`](https://docs.xarray.dev/en/stable/user-guide/data-structures.html#dataarray)
-- [`to_zarr_store()`][scyfio.BioFile.to_zarr_store] → [`zarr.abc.store.Store`](https://zarr.readthedocs.io/en/v3.1.2/user-guide/storage.html)
+- [`to_xarray()`][scyfio.ImageFile.to_xarray] → [`xarray.DataArray`](https://docs.xarray.dev/en/stable/user-guide/data-structures.html#dataarray)
+- [`to_zarr_store()`][scyfio.ImageFile.to_zarr_store] → [`zarr.abc.store.Store`](https://zarr.readthedocs.io/en/v3.1.2/user-guide/storage.html)
 - [`to_dask()`](#using-dask-for-lazy-computation) → [`dask.array.Array`](https://docs.dask.org/en/stable/array.html)
 
 You will find each of these methods on
 
-- `BioFile`: where you can specify `series` and `resolution` as arguments
+- `ImageFile`: where you can specify `series` and `resolution` as arguments
 - `Series`: where the `series` argument is pre-filled, and you can specify `resolution` if needed.
-- `LazyBioArray`: where the returned object shares the same lazy view onto the data.
+- `LazyImageArray`: where the returned object shares the same lazy view onto the data.
 
 ### Labeled dimensions/coordinates with `xarray`
 
@@ -314,7 +314,7 @@ loading everything into memory.  Semantics for coords are as follows:
 - `S`: RGB/RGBA channels, if applicable.
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     xarr = bf.to_xarray(series=0)  # xarray.DataArray with dims and coords
     print(xarr.dims)       # ('T', 'C', 'Z', 'Y', 'X')
     print(xarr.coords)     # coordinates parsed from OME metadata
@@ -333,9 +333,9 @@ with BioFile("image.nd2") as bf:
 
 ### Complete virtual OME-Zarr view
 
-The [`to_zarr_store()`][scyfio.BioFile.to_zarr_store] method returns a
+The [`to_zarr_store()`][scyfio.ImageFile.to_zarr_store] method returns a
 `zarr.Store` that can be passed to `zarr.open()`.   When you cast a
-complete `BioFile` to a zarr store, without specifying a series or resolution,
+complete `ImageFile` to a zarr store, without specifying a series or resolution,
 __the returned store provides a virtual view of the entire file as a spec compliant
 OME-Zarr__, (similar to what you would get if you converted the file to
 using [`bioformats2raw`](https://github.com/glencoesoftware/bioformats2raw), but
@@ -373,27 +373,27 @@ print(level0.shape, level0.dtype)
 
 ### Lazy computation with `dask`
 
-For computations over large datasets, [`BioFile.to_dask`][scyfio.BioFile.to_dask]
-wraps `LazyBioArray` in a dask array:
+For computations over large datasets, [`ImageFile.to_dask`][scyfio.ImageFile.to_dask]
+wraps `LazyImageArray` in a dask array:
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     darr = bf.to_dask(chunks=(1, 1, 1, -1, -1))
     result = darr.mean(axis=2).compute()  # lazy z-projection
 ```
 
 You don't gain any _additional_ data reading "laziness" here.  But you can use
 dask's rich ecosystem of chunked, parallelized computations and out-of-core
-algorithms on top of the lazy reading provided by `LazyBioArray`.
+algorithms on top of the lazy reading provided by `LazyImageArray`.
 
 !!! danger "File must be open"
-    Remember that the `BioFile` [must be open](#understanding-lifecycle)
+    Remember that the `ImageFile` [must be open](#understanding-lifecycle)
     when you `.compute()` the dask array.
 
 You can also use tile-based chunking for very large planes:
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     darr = bf.to_dask(tile_size=(512, 512))       # explicit tile size
     darr = bf.to_dask(tile_size="auto")           # query SCIFIO for optimal size
 ```
@@ -413,12 +413,12 @@ with BioFile("image.nd2") as bf:
 
 ### OME Metadata
 
-[`ome_metadata()`][scyfio.BioFile.ome_metadata] returns a rich, structured
+[`ome_metadata()`][scyfio.ImageFile.ome_metadata] returns a rich, structured
 [`ome_types.OME`][] object, with all of the metadata parsed and organized
 according to the OME data model.
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     ome = bf.ome_metadata        # parsed OME object
     xml_str = bf.ome_xml         # raw OME-XML string
 
@@ -429,12 +429,12 @@ with BioFile("image.nd2") as bf:
 
 ### Core Metadata
 
-[`core_metadata()`][scyfio.BioFile.core_metadata] returns a
+[`core_metadata()`][scyfio.ImageFile.core_metadata] returns a
 [`CoreMetadata`][scyfio.CoreMetadata] dataclass with `shape`, `dtype`, and
 acquisition flags for a given series/resolution:
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     meta = bf.core_metadata(series=0, resolution=0)
     print(meta.shape)             # OMEShape(t=10, c=2, z=5, y=512, x=512, rgb=1)
     print(meta.dtype)             # uint16
@@ -444,11 +444,11 @@ with BioFile("image.nd2") as bf:
 
 ### Global Metadata
 
-[`global_metadata()`][scyfio.BioFile.global_metadata] returns
+[`global_metadata()`][scyfio.ImageFile.global_metadata] returns
 reader/file-specific key/value pairs:
 
 ```python
-with BioFile("image.nd2") as bf:
+with ImageFile("image.nd2") as bf:
     for key, value in bf.global_metadata().items():
         print(f"{key}: {value}")
 ```
@@ -458,16 +458,16 @@ with BioFile("image.nd2") as bf:
 You can query SCIFIO for supported formats without opening a file:
 
 ```python
-from scyfio import BioFile
+from scyfio import ImageFile
 
 # SCIFIO version
-print(BioFile.scifio_version())  # "0.39.1"
+print(ImageFile.scifio_version())  # "0.39.1"
 
 # all supported file extensions
-suffixes = BioFile.list_supported_suffixes()  # {"nd2", "czi", "tiff", ...}
+suffixes = ImageFile.list_supported_suffixes()  # {"nd2", "czi", "tiff", ...}
 
 # detailed reader info
-for reader in BioFile.list_available_readers():
+for reader in ImageFile.list_available_formats():
     print(f"{reader.format}: {reader.suffixes} (GPL={reader.is_gpl})")
 ```
 
@@ -477,6 +477,6 @@ for reader in BioFile.list_available_readers():
 | -------- | ----------- | ------- |
 | `SCIFIO_VERSION` | scifio-bf-compat version or full Maven coordinate | `"io.scif:scifio-bf-compat:4.1.1"` |
 | `BIOFORMATS_VERSION` | Bio-Formats readers version or full Maven coordinate (e.g. `"6.10.1"` or `"ome:formats-gpl:6.10.1"`) | `"ome:formats-gpl:6.10.1"` |
-| `BFF_JAVA_VERSION` | Java version to use (e.g. `11`, `17`, `21`) | `11` |
-| `BFF_JAVA_VENDOR` | Java vendor (e.g. `zulu-jre`, `temurin`, `adoptium`) | `zulu-jre` |
-| `BFF_JAVA_FETCH` | Java fetch behavior: `always`, `never`, or `auto` (See [scyjava docs](https://github.com/scijava/scyjava?tab=readme-ov-file#bootstrap-a-java-installation)). | `always` |
+| `SCYFIO_JAVA_VERSION` | Java version to use (e.g. `11`, `17`, `21`) | `11` |
+| `SCYFIO_JAVA_VENDOR` | Java vendor (e.g. `zulu-jre`, `temurin`, `adoptium`) | `zulu-jre` |
+| `SCYFIO_JAVA_FETCH` | Java fetch behavior: `always`, `never`, or `auto` (See [scyjava docs](https://github.com/scijava/scyjava?tab=readme-ov-file#bootstrap-a-java-installation)). | `always` |

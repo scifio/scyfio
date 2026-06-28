@@ -15,12 +15,12 @@ import sys
 import time
 from pathlib import Path
 
-from scyfio import BioFile
+from scyfio import ImageFile
 
 
 def benchmark_keep_open(path: Path, n_reads: int = 20) -> float:
     """Baseline: keep file open, read planes."""
-    with BioFile(path) as bf:
+    with ImageFile(path) as bf:
         meta = bf.core_metadata()
         shape = meta.shape
         t0 = time.perf_counter()
@@ -31,7 +31,7 @@ def benchmark_keep_open(path: Path, n_reads: int = 20) -> float:
 
 def benchmark_suspend_resume(path: Path, n_cycles: int = 20) -> float:
     """Suspend/resume: close() + open() between reads."""
-    with BioFile(path) as bf:
+    with ImageFile(path) as bf:
         meta = bf.core_metadata()
         shape = meta.shape
         t0 = time.perf_counter()
@@ -44,12 +44,12 @@ def benchmark_suspend_resume(path: Path, n_cycles: int = 20) -> float:
 
 def benchmark_full_reopen(path: Path, n_cycles: int = 10) -> float:
     """Full destroy + fresh re-initialization between reads."""
-    with BioFile(path) as bf:
+    with ImageFile(path) as bf:
         bf.read_plane()
 
     t0 = time.perf_counter()
     for _ in range(n_cycles):
-        with BioFile(path) as bf:
+        with ImageFile(path) as bf:
             meta = bf.core_metadata()
             shape = meta.shape
             bf.read_plane(t=0, c=0, z=min(1, shape.z - 1))

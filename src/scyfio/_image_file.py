@@ -34,13 +34,13 @@ if TYPE_CHECKING:
     # SCIFIO's io.scif.Reader has no type stub in ./typings; treat it opaquely.
     IFormatReader = Any
 
-    from scyfio._lazy_array import LazyBioArray
-    from scyfio._zarr import BFOmeZarrStore
-    from scyfio._zarr._array_store import BFArrayStore
+    from scyfio._lazy_array import LazyImageArray
+    from scyfio._zarr import OmeZarrStore
+    from scyfio._zarr._array_store import ArrayStore
 
 
 @dataclass(frozen=True)
-class ReaderInfo:
+class FormatInfo:
     """Information about a SCIFIO format.
 
     Attributes
@@ -77,23 +77,23 @@ if _max_bytes := os.getenv("SCYFIO_MAX_JAVA_BYTES"):  # pragma: no cover
         )
 
 
-class BioFile(Sequence[Series]):
+class ImageFile(Sequence[Series]):
     """Read image and metadata from a file supported by SCIFIO.
 
-    BioFile instances must be explicitly opened before use, either by:
+    ImageFile instances must be explicitly opened before use, either by:
 
-    1. Using a context manager: `with BioFile(path) as bf: ...`
-    2. Explicitly calling `open()`: `bf = BioFile(path).open()`
+    1. Using a context manager: `with ImageFile(path) as bf: ...`
+    2. Explicitly calling `open()`: `bf = ImageFile(path).open()`
 
     The recommended pattern is to use the context manager, which automatically
     handles opening and closing the file and cleanup of Java resources; but many usage
     patterns *will* also require explicit open/close.
 
-    BioFile instances are not thread-safe. Create separate instances per thread.
+    ImageFile instances are not thread-safe. Create separate instances per thread.
 
     Lifecycle
     ---------
-    BioFile manages the underlying Java reader through three states:
+    ImageFile manages the underlying Java reader through three states:
 
         UNINITIALIZED ── open() ──> OPEN ── close() ──> SUSPENDED
              ↑    ↑                  │ ↑                     │
@@ -115,7 +115,7 @@ class BioFile(Sequence[Series]):
     This is what enables the fast `open()` path.
 
     `destroy()` releases all of these, making the Java objects eligible for
-    JVM garbage collection. The `BioFile` reverts to its initial state.
+    JVM garbage collection. The `ImageFile` reverts to its initial state.
 
     Parameters
     ----------
@@ -241,10 +241,10 @@ class BioFile(Sequence[Series]):
         --------
         ```python
         # Method chaining
-        bf = BioFile(path).open()
+        bf = ImageFile(path).open()
 
         # Or two lines
-        bf = BioFile(path)
+        bf = ImageFile(path)
         bf.open()
         ```
 
@@ -349,7 +349,7 @@ class BioFile(Sequence[Series]):
         Examples
         --------
         ```python
-        bf = BioFile(path)
+        bf = ImageFile(path)
 
         # Started uninitialized -> ends suspended
         with bf.ensure_open():
@@ -405,7 +405,7 @@ class BioFile(Sequence[Series]):
             self._suspended = False
             self._source_live = False
 
-    def as_array(self, series: int = 0, resolution: int = 0) -> LazyBioArray:
+    def as_array(self, series: int = 0, resolution: int = 0) -> LazyImageArray:
         """Return a lazy numpy-compatible array that reads data on-demand.
 
         The returned array behaves like a numpy array but reads data from disk
@@ -425,14 +425,14 @@ class BioFile(Sequence[Series]):
 
         Returns
         -------
-        LazyBioArray
+        LazyImageArray
             Lazy array in (T, C, Z, Y, X) or (T, C, Z, Y, X, rgb) format
 
         Examples
         --------
         Index like a numpy array - only reads what you request:
 
-        >>> with BioFile("image.nd2") as bf:
+        >>> with ImageFile("image.nd2") as bf:
         ...     arr = bf.as_array()  # No data read yet
         ...
         ...     # Read single plane (t=0, c=0, z=2)
@@ -450,16 +450,16 @@ class BioFile(Sequence[Series]):
 
         Notes
         -----
-        BioFile must remain open while using the array. Multiple arrays can
+        ImageFile must remain open while using the array. Multiple arrays can
         coexist, each reading from their own series independently.
 
         Planes >2GB automatically use tiled reading (transparent, ~20% slower).
         """
-        from scyfio._lazy_array import LazyBioArray
+        from scyfio._lazy_array import LazyImageArray
 
         meta0 = self.core_metadata(series)  # validates series
         resolution = _normalize_resolution(resolution, meta0.resolution_count)
-        return LazyBioArray(self, series, resolution)
+        return LazyImageArray(self, series, resolution)
 
     @overload
     def to_zarr_store(
@@ -467,7 +467,7 @@ class BioFile(Sequence[Series]):
         series: Literal[None] = ...,
         *,
         tile_size: tuple[int, int] | None = ...,
-    ) -> BFOmeZarrStore: ...
+    ) -> OmeZarrStore: ...
     @overload
     def to_zarr_store(
         self,
@@ -475,14 +475,14 @@ class BioFile(Sequence[Series]):
         resolution: int = ...,
         *,
         tile_size: tuple[int, int] | None = ...,
-    ) -> BFArrayStore: ...
+    ) -> ArrayStore: ...
     def to_zarr_store(
         self,
         series: int | None = None,
         resolution: int = 0,
         *,
         tile_size: tuple[int, int] | None = None,
-    ) -> BFOmeZarrStore | BFArrayStore:
+    ) -> OmeZarrStore | ArrayStore:
         """Return a zarr v3 group store containing all series and resolutions.
 
         Creates an OME-ZARR group structure following NGFF v0.5 specification,
@@ -519,7 +519,7 @@ class BioFile(Sequence[Series]):
 
         Returns
         -------
-        BFOmeZarrStore
+        OmeZarrStore
             Read-only zarr v3 Store containing the full file hierarchy.
 
         Examples
@@ -527,7 +527,7 @@ class BioFile(Sequence[Series]):
         Open as zarr group and access arrays:
 
         >>> import zarr
-        >>> with BioFile("image.nd2") as bf:
+        >>> with ImageFile("image.nd2") as bf:
         ...     group = zarr.open_group(bf.to_zarr_store(), mode="r")
         ...     # Access first series, full resolution
         ...     arr = group["0/0"]
@@ -547,9 +547,9 @@ class BioFile(Sequence[Series]):
         - Conforms to NGFF v0.5 specification
         """
         if series is None:
-            from scyfio._zarr._group_store import BFOmeZarrStore
+            from scyfio._zarr._group_store import OmeZarrStore
 
-            return BFOmeZarrStore(self, tile_size=tile_size)
+            return OmeZarrStore(self, tile_size=tile_size)
 
         lazy = self.as_array(series=series, resolution=resolution)
         return lazy.to_zarr_store(tile_size=tile_size)
@@ -565,7 +565,7 @@ class BioFile(Sequence[Series]):
         """Create dask array for lazy computation on the image data.
 
         Returns a dask array in TCZYX[r] order that wraps a
-        [`LazyBioArray`][scyfio.LazyBioArray]. Uses single-threaded scheduler
+        [`LazyImageArray`][scyfio.LazyImageArray]. Uses single-threaded scheduler
         for reader thread safety.
 
         Parameters
@@ -600,13 +600,13 @@ class BioFile(Sequence[Series]):
 
         Examples
         --------
-        >>> with BioFile("image.nd2") as bf:
+        >>> with ImageFile("image.nd2") as bf:
         ...     darr = bf.to_dask(chunks=(1, 1, 1, -1, -1))
         ...     result = darr.mean(axis=2).compute()  # Z-projection
 
         Notes
         -----
-        - BioFile must remain open during computation
+        - ImageFile must remain open during computation
         - Uses synchronous scheduler by default (required for thread safety)
         """
         lazy_arr = self.as_array(series=series, resolution=resolution)
@@ -703,7 +703,7 @@ class BioFile(Sequence[Series]):
         return len(self._core_meta_list)
 
     def series_count(self) -> int:
-        """Return the number of series in the file (same as [`__len__`][scyfio.BioFile.__len__])."""  # noqa: E501
+        """Return the number of series in the file (same as [`__len__`][scyfio.ImageFile.__len__])."""  # noqa: E501
         return len(self)
 
     @overload
@@ -761,9 +761,9 @@ class BioFile(Sequence[Series]):
 
         ``python
         import cmap
-        from scyfio import BioFile
+        from scyfio import ImageFile
 
-        with BioFile("indexed_image.ome.tiff") as bf:
+        with ImageFile("indexed_image.ome.tiff") as bf:
             lut = bf.lookup_table()
             if lut is not None:
                 colormap = cmap.Colormap(lut / lut.max())  # Normalize to [0, 1]
@@ -795,8 +795,8 @@ class BioFile(Sequence[Series]):
     def __repr__(self) -> str:
         name = Path(self._path).name
         if self.closed:
-            return f"BioFile('{name}', closed)"
-        return f"BioFile('{name}', {len(self)} series)"
+            return f"ImageFile('{name}', closed)"
+        return f"ImageFile('{name}', {len(self)} series)"
 
     def read_plane(
         self,
@@ -815,7 +815,7 @@ class BioFile(Sequence[Series]):
         fine-grained control for reading specific planes or rectangular
         sub-regions. Most users should use `as_array()` or `to_dask()` instead.
 
-        **Not thread-safe.** Create separate BioFile instances per thread.
+        **Not thread-safe.** Create separate ImageFile instances per thread.
 
         Parameters
         ----------
@@ -844,7 +844,7 @@ class BioFile(Sequence[Series]):
 
         Examples
         --------
-        >>> with BioFile("image.nd2") as bf:
+        >>> with ImageFile("image.nd2") as bf:
         ...     plane = bf.read_plane(t=0, c=1, z=5)
         ...     roi = bf.read_plane(y=slice(200, 300), x=slice(200, 300))
 
@@ -897,24 +897,12 @@ class BioFile(Sequence[Series]):
         except Exception:  # pragma: no cover
             return "unknown"
 
-    # Deprecated alias retained for backwards compatibility.
-    @staticmethod
-    def bioformats_version() -> str:
-        """Deprecated alias for [`scifio_version`][scyfio.BioFile.scifio_version]."""
-        return BioFile.scifio_version()
-
     @staticmethod
     def maven_coordinate() -> str:
         """Return the Maven coordinate used to load SCIFIO (scifio-bf-compat)."""
         from ._java_stuff import MAVEN_COORDINATE
 
         return MAVEN_COORDINATE
-
-    # Deprecated alias retained for backwards compatibility.
-    @staticmethod
-    def bioformats_maven_coordinate() -> str:
-        """Deprecated alias for [`maven_coordinate`][scyfio.BioFile.maven_coordinate]."""  # noqa: E501
-        return BioFile.maven_coordinate()
 
     @staticmethod
     @cache
@@ -928,12 +916,12 @@ class BioFile(Sequence[Series]):
 
     @staticmethod
     @cache
-    def list_available_readers() -> list[ReaderInfo]:
+    def list_available_formats() -> list[FormatInfo]:
         """List all available SCIFIO formats.
 
         Returns
         -------
-        list[ReaderInfo]
+        list[FormatInfo]
             Information about each available format, including:
 
             - format: human-readable format name (e.g., "Nikon ND2")
@@ -946,7 +934,7 @@ class BioFile(Sequence[Series]):
         for fmt in get_scifio().format().getAllFormats():
             class_name = str(fmt.getClass().getName()).removeprefix("io.scif.formats.")
             formats.append(
-                ReaderInfo(
+                FormatInfo(
                     format=str(fmt.getFormatName()),
                     suffixes=tuple(str(s) for s in fmt.getSuffixes()),
                     class_name=class_name,
@@ -1199,7 +1187,7 @@ class BioFile(Sequence[Series]):
         done once before entering a tight loop.
 
         It *does*, however, dispatch to tiled or direct read based on plane size.
-        (Note: users have full power to control tiling via slicing into LazyBioArray,
+        (Note: users have full power to control tiling via slicing into LazyImageArray,
         or by using to_dask()... this is just a safety net for requests that would
         exceed Java limits.)
         """
@@ -1384,9 +1372,9 @@ def _close_java_reader(java_reader: IFormatReader | None) -> None:
 
     Used as weakref finalizer for last-resort cleanup. This can ONLY close
     the Java file handle - it cannot access Python instance state because
-    it's called after the BioFile instance is garbage collected.
+    it's called after the ImageFile instance is garbage collected.
 
-    For explicit cleanup, use the BioFile.close() method instead.
+    For explicit cleanup, use the ImageFile.close() method instead.
     """
     # Only attempt close during normal operation (not shutdown)
     if java_reader is None or sys.is_finalizing() or not jpype.isJVMStarted():
@@ -1395,19 +1383,19 @@ def _close_java_reader(java_reader: IFormatReader | None) -> None:
         java_reader.close()
 
 
-class _EnsureOpenContext(AbstractContextManager[BioFile]):
-    """A context manager that ensures BioFile is open and restores state on exit.
+class _EnsureOpenContext(AbstractContextManager[ImageFile]):
+    """A context manager that ensures ImageFile is open and restores state on exit.
 
-    Unlike BioFile.__enter__/__exit__ which destroys on exit, this context manager
+    Unlike ImageFile.__enter__/__exit__ which destroys on exit, this context manager
     ensures the file is open for the duration of the block, then restores it to
     whatever state it was in before (open or closed).
     """
 
-    def __init__(self, biofile: BioFile, close_on_exit: bool) -> None:
+    def __init__(self, biofile: ImageFile, close_on_exit: bool) -> None:
         self.biofile = biofile
         self.close_on_exit = close_on_exit
 
-    def __enter__(self) -> BioFile:
+    def __enter__(self) -> ImageFile:
         if self.biofile.closed:
             self.biofile.open()
         return self.biofile

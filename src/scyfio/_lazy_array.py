@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     import dask.array
     import xarray
 
-    from scyfio._biofile import BioFile
-    from scyfio._zarr import BFArrayStore
+    from scyfio._image_file import ImageFile
+    from scyfio._zarr import ArrayStore
 
 
 BoundsTCZYXS: TypeAlias = tuple[slice, slice, slice, slice, slice, slice]
@@ -25,14 +25,14 @@ SqueezedTCZYXS: TypeAlias = tuple[bool, bool, bool, bool, bool, bool]
 ShapeTCZYXS: TypeAlias = tuple[int, int, int, int, int, int]
 
 
-class LazyBioArray:
+class LazyImageArray:
     """Pythonic lazy array interface for a single image Series/Resolution.
 
     This object provides a numpy-compatible API for on-demand access to a
     specific series and resolution level in a SCIFIO-read file. A single file
     can contain multiple series (e.g., wells in a plate, fields of view, or
     tiled regions), and each series can have
-    multiple resolution levels (pyramid layers). LazyBioArray represents one
+    multiple resolution levels (pyramid layers). LazyImageArray represents one
     of these series/resolution combinations as a numpy-style array.
 
     The array is always 5-dimensional with shape (T, C, Z, Y, X), though some
@@ -49,9 +49,9 @@ class LazyBioArray:
 
     Examples
     --------
-    >>> with BioFile("image.nd2") as bf:
+    >>> with ImageFile("image.nd2") as bf:
     ...     arr = bf.as_array()  # No data read yet
-    ...     view = arr[0, 0, 2]  # Returns LazyBioArray view (no I/O)
+    ...     view = arr[0, 0, 2]  # Returns LazyImageArray view (no I/O)
     ...     plane = np.asarray(view)  # Now reads single plane from disk
     ...     roi = arr[:, :, :, 100:200, 50:150]  # Lazy view of sub-region
     ...     full_data = np.array(arr)  # Materialize all data
@@ -59,24 +59,24 @@ class LazyBioArray:
 
     Composition example:
 
-    >>> with BioFile("image.nd2") as bf:
+    >>> with ImageFile("image.nd2") as bf:
     ...     arr = bf.as_array()
-    ...     view1 = arr[0:10]  # LazyBioArray (no I/O)
-    ...     view2 = view1[2:5]  # LazyBioArray (still no I/O)
+    ...     view1 = arr[0:10]  # LazyImageArray (no I/O)
+    ...     view2 = view1[2:5]  # LazyImageArray (still no I/O)
     ...     data = np.asarray(view2)  # Read frames 2-4 from disk
 
     Notes
     -----
-    - BioFile must remain open while using this array
+    - ImageFile must remain open while using this array
     - Step indexing (`arr[::2]`), fancy indexing, and boolean masks not supported
-    - Not thread-safe: create separate BioFile instances per thread
+    - Not thread-safe: create separate ImageFile instances per thread
     """
 
     __slots__ = (
-        "_biofile",
         "_bounds_tczyxs",
         "_dtype",
         "_full_shape_tczyxs",
+        "_image_file",
         "_meta",
         "_resolution",
         "_series",
@@ -84,20 +84,20 @@ class LazyBioArray:
         "_squeezed_tczyxs",
     )
 
-    def __init__(self, biofile: BioFile, series: int, resolution: int = 0) -> None:
+    def __init__(self, biofile: ImageFile, series: int, resolution: int = 0) -> None:
         """
         Initialize lazy array wrapper.
 
         Parameters
         ----------
-        biofile : BioFile
-            Open BioFile instance to read from
+        biofile : ImageFile
+            Open ImageFile instance to read from
         series : int
             Series index this array represents
         resolution : int, optional
             Resolution level (0 = full resolution), by default 0
         """
-        self._biofile = biofile
+        self._image_file = biofile
         self._series = series
         self._resolution = resolution
 
@@ -181,7 +181,7 @@ class LazyBioArray:
 
         # Apply scene pixels metadata if possible
         try:
-            pix = self._biofile.ome_metadata.images[self._series].pixels
+            pix = self._image_file.ome_metadata.images[self._series].pixels
         except (IndexError, AttributeError):
             pass
         else:
@@ -258,8 +258,8 @@ class LazyBioArray:
             # Validate tile_size format
             if tile_size == "auto":
                 # Query SCIFIO for the optimal tile size of this image.
-                rdr = self._biofile._ensure_java_reader()
-                image_index = self._biofile._image_index[self._series][  # type: ignore[index]
+                rdr = self._image_file._ensure_java_reader()
+                image_index = self._image_file._image_index[self._series][  # type: ignore[index]
                     self._resolution
                 ]
                 tile_size = (
@@ -305,7 +305,7 @@ class LazyBioArray:
             self,
             dims=self.dims,
             coords=self.coords,
-            attrs={"ome_metadata": self._biofile.ome_metadata},
+            attrs={"ome_metadata": self._image_file.ome_metadata},
         )
 
     def to_zarr_store(
@@ -314,7 +314,7 @@ class LazyBioArray:
         tile_size: tuple[int, int] | None = None,
         rgb_as_channels: bool = False,
         squeeze_singletons: bool = False,
-    ) -> BFArrayStore:
+    ) -> ArrayStore:
         """Create a read-only zarr v3 store backed by this array.
 
         Each zarr chunk maps to a single ``read_plane()`` call. Requires
@@ -335,13 +335,13 @@ class LazyBioArray:
 
         Returns
         -------
-        BFArrayStore
+        ArrayStore
             A zarr v3 Store suitable for ``zarr.open_array(store, mode="r")``.
         """
-        from scyfio._zarr import BFArrayStore
+        from scyfio._zarr import ArrayStore
 
-        return BFArrayStore(
-            self._biofile,
+        return ArrayStore(
+            self._image_file,
             self._series,
             self._resolution,
             tile_size=tile_size,
@@ -352,11 +352,11 @@ class LazyBioArray:
     def __repr__(self) -> str:
         """String representation."""
         return (
-            f"LazyBioArray(shape={self.shape}, dtype={self.dtype}, "
-            f"file='{self._biofile.filename}')"
+            f"LazyImageArray(shape={self.shape}, dtype={self.dtype}, "
+            f"file='{self._image_file.filename}')"
         )
 
-    def __getitem__(self, key: Any) -> LazyBioArray:
+    def __getitem__(self, key: Any) -> LazyImageArray:
         """Index the array with numpy-style syntax, returning a lazy view.
 
         Supports integer and slice indexing. Returns a view without reading data -
@@ -369,7 +369,7 @@ class LazyBioArray:
 
         Returns
         -------
-        LazyBioArray
+        LazyImageArray
             A lazy view of the requested data
 
         Raises
@@ -383,7 +383,7 @@ class LazyBioArray:
         key = self._normalize_key(key)
         new_bounds, new_squeezed = self._map_user_index_to_tczyxs(key)
 
-        return LazyBioArray._create_view(
+        return LazyImageArray._create_view(
             parent=self,
             bounds_tczyxs=new_bounds,
             squeezed_tczyxs=new_squeezed,
@@ -424,7 +424,7 @@ class LazyBioArray:
         # just dispatch to numpy for now - this allows xarray to be lazy
         # but we could implement some functions natively here in the future if desired
         def convert_arg(a: Any) -> Any:
-            """Recursively convert LazyBioArray instances to numpy arrays."""
+            """Recursively convert LazyImageArray instances to numpy arrays."""
             if isinstance(a, type(self)):
                 return np.asarray(a)
             if isinstance(a, (list, tuple)):
@@ -447,14 +447,14 @@ class LazyBioArray:
     @classmethod
     def _create_view(
         cls,
-        parent: LazyBioArray,
+        parent: LazyImageArray,
         bounds_tczyxs: BoundsTCZYXS,
         squeezed_tczyxs: SqueezedTCZYXS,
-    ) -> LazyBioArray:
+    ) -> LazyImageArray:
         """Create a view of a parent array without reading data."""
         view = cls.__new__(cls)
         view._meta = meta = parent._meta
-        view._biofile = parent._biofile
+        view._image_file = parent._image_file
         view._series = parent._series
         view._resolution = parent._resolution
         view._full_shape_tczyxs = cast("ShapeTCZYXS", tuple(meta.shape))
@@ -602,7 +602,7 @@ class LazyBioArray:
         if y_stop <= y_start or x_stop <= x_start:
             return
 
-        bf = self._biofile
+        bf = self._image_file
         # Acquire lock once for entire batch read
         with bf._lock:
             reader = bf._ensure_java_reader()

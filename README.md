@@ -30,10 +30,10 @@ pip install scyfio
 ### Quick Start
 
 ```python
-from scyfio import BioFile
+from scyfio import ImageFile
 import numpy as np
 
-with BioFile("tests/data/ND2_dims_p4z5t3c2y32x32.nd2") as bf:
+with ImageFile("tests/data/ND2_dims_p4z5t3c2y32x32.nd2") as bf:
     # Access OME metadata
     print(bf.ome_metadata)  # ome_types.OME object
 
@@ -92,10 +92,10 @@ export BIOFORMATS_VERSION="6.10.1"
 To see the loaded SCIFIO version and the maven coordinate that was used:
 
 ```python
-from scyfio import BioFile
+from scyfio import ImageFile
 
-print(BioFile.scifio_version())      # e.g. "0.39.1"
-print(BioFile.maven_coordinate())    # e.g. "io.scif:scifio-bf-compat:4.1.1"
+print(ImageFile.scifio_version())      # e.g. "0.39.1"
+print(ImageFile.maven_coordinate())    # e.g. "io.scif:scifio-bf-compat:4.1.1"
 ```
 
 ### Java Runtime
@@ -112,12 +112,12 @@ You can configure the Java version and/or vendor using environment variables:
 
 ```bash
 # Use Adoptium JDK 17
-export BFF_JAVA_VERSION=17
-export BFF_JAVA_VENDOR=adoptium
+export SCYFIO_JAVA_VERSION=17
+export SCYFIO_JAVA_VENDOR=adoptium
 
 # Use Temurin JDK 21
-export BFF_JAVA_VERSION=21
-export BFF_JAVA_VENDOR=temurin
+export SCYFIO_JAVA_VERSION=21
+export SCYFIO_JAVA_VENDOR=temurin
 ```
 
 Available vendors: `zulu-jre`, `zulu`, `adoptium`, `temurin`, and

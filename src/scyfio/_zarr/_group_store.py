@@ -23,8 +23,8 @@ if TYPE_CHECKING:
     from zarr.core.buffer import Buffer, BufferPrototype
     from zarr.storage import StoreLike
 
-    from scyfio._biofile import BioFile
-    from scyfio._zarr._array_store import BFArrayStore
+    from scyfio._image_file import ImageFile
+    from scyfio._zarr._array_store import ArrayStore
 
 # OME-NGFF dimension type mapping
 _DIMENSION_TYPES = {
@@ -87,7 +87,7 @@ _OME_TO_NGFF_LENGTH: dict[UnitsLength, str] = {
 }
 
 
-class BFOmeZarrStore(ReadOnlyStore):
+class OmeZarrStore(ReadOnlyStore):
     """Read-only zarr v3 group store for a complete SCIFIO file hierarchy.
 
     Virtualizes an entire file as an OME-ZARR group containing
@@ -109,14 +109,14 @@ class BFOmeZarrStore(ReadOnlyStore):
 
     Parameters
     ----------
-    biofile : BioFile
-        An open BioFile instance. Must remain open for the lifetime of the store.
+    biofile : ImageFile
+        An open ImageFile instance. Must remain open for the lifetime of the store.
     tile_size : tuple[int, int], optional
         If provided, Y and X are chunked into tiles of this size.
 
     Examples
     --------
-    >>> with BioFile("image.nd2") as bf:
+    >>> with ImageFile("image.nd2") as bf:
     ...     group = zarr.open_group(bf.to_zarr_store), mode="r")
     ...     # Access first series, full resolution
     ...     arr = group["0/0"]
@@ -125,15 +125,15 @@ class BFOmeZarrStore(ReadOnlyStore):
 
     def __init__(
         self,
-        biofile: BioFile,
+        biofile: ImageFile,
         /,
         *,
         tile_size: tuple[int, int] | None = None,
     ) -> None:
         super().__init__(read_only=True)
-        self._biofile = biofile
+        self._image_file = biofile
         self._tile_size = tile_size
-        self._array_stores: dict[tuple[int, int], BFArrayStore] = {}
+        self._array_stores: dict[tuple[int, int], ArrayStore] = {}
         self._is_open = True
 
     # ------------------------------------------------------------------
@@ -156,7 +156,7 @@ class BFOmeZarrStore(ReadOnlyStore):
 
     def _build_ome_metadata(self) -> bytes:
         """Build OME group metadata with series list (NGFF v0.5)."""
-        series_count = len(self._biofile)
+        series_count = len(self._image_file)
         metadata: dict[str, Any] = {
             "zarr_format": 3,
             "node_type": "group",
@@ -186,8 +186,8 @@ class BFOmeZarrStore(ReadOnlyStore):
         not be fully compliant
         with all NGFF tools.
         """
-        meta = self._biofile.core_metadata(series=series)
-        ome = self._biofile.ome_metadata
+        meta = self._image_file.core_metadata(series=series)
+        ome = self._image_file.ome_metadata
         datasets = self._build_datasets(ome, series, meta.resolution_count)
 
         metadata: dict[str, Any] = {
@@ -263,7 +263,7 @@ class BFOmeZarrStore(ReadOnlyStore):
         pps = physical_pixel_sizes(ome, series)
 
         # Get reference dimensions from resolution 0
-        meta_0 = self._biofile.core_metadata(series, 0)
+        meta_0 = self._image_file.core_metadata(series, 0)
         width_0 = meta_0.shape.x
         height_0 = meta_0.shape.y
         depth_0 = meta_0.shape.z
@@ -274,7 +274,7 @@ class BFOmeZarrStore(ReadOnlyStore):
             dataset: dict[str, Any] = {"path": str(res)}
 
             # Get dimensions for this resolution to calculate downsampling factor
-            meta_r = self._biofile.core_metadata(series, res)
+            meta_r = self._image_file.core_metadata(series, res)
             width_r = meta_r.shape.x
             height_r = meta_r.shape.y
             depth_r = meta_r.shape.z
@@ -302,15 +302,15 @@ class BFOmeZarrStore(ReadOnlyStore):
 
         return datasets
 
-    def _get_array_store(self, series: int, resolution: int) -> BFArrayStore:
+    def _get_array_store(self, series: int, resolution: int) -> ArrayStore:
         """Get or create cached array store for a series/resolution.
 
-        Uses the integrated BFArrayStore with RGB expansion and dimension
+        Uses the integrated ArrayStore with RGB expansion and dimension
         squeezing flags.
         """
         key = (series, resolution)
         if key not in self._array_stores:
-            arr = self._biofile.as_array(series, resolution)
+            arr = self._image_file.as_array(series, resolution)
             # Single store with integrated transformations
             store = arr.to_zarr_store(
                 tile_size=self._tile_size,
@@ -328,7 +328,7 @@ class BFOmeZarrStore(ReadOnlyStore):
         if not isinstance(value, type(self)):  # pragma: no cover
             return NotImplemented
         return (
-            self._biofile.filename == value._biofile.filename
+            self._image_file.filename == value._image_file.filename
             and self._tile_size == value._tile_size
         )
 
@@ -348,20 +348,20 @@ class BFOmeZarrStore(ReadOnlyStore):
         elif parsed.level == PathLevel.OME_GROUP:
             data = self._build_ome_metadata()
         elif parsed.level == PathLevel.OME_METADATA:
-            data = self._biofile.ome_xml.encode()
+            data = self._image_file.ome_xml.encode()
         elif parsed.level == PathLevel.MULTISCALES_GROUP:
             series = parsed.series
-            if series is None or not (0 <= series < len(self._biofile)):
+            if series is None or not (0 <= series < len(self._image_file)):
                 return None
             data = self._build_multiscales_metadata(series)
         elif parsed.level == PathLevel.ARRAY_METADATA:
             if (
                 (series := parsed.series) is None
                 or (resolution := parsed.resolution) is None
-                or not (0 <= series < len(self._biofile))
+                or not (0 <= series < len(self._image_file))
             ):
                 return None  # pragma: no cover
-            meta = self._biofile.core_metadata(series=series)
+            meta = self._image_file.core_metadata(series=series)
             if not (0 <= resolution < meta.resolution_count):
                 return None  # pragma: no cover
             store = self._get_array_store(series, resolution)
@@ -371,14 +371,14 @@ class BFOmeZarrStore(ReadOnlyStore):
                 (series := parsed.series) is None
                 or (resolution := parsed.resolution) is None
                 or (chunk_key := parsed.chunk_key) is None
-                or not (0 <= series < len(self._biofile))
+                or not (0 <= series < len(self._image_file))
             ):
                 return None  # pragma: no cover
-            meta = self._biofile.core_metadata(series=series)
+            meta = self._image_file.core_metadata(series=series)
             if not (0 <= resolution < meta.resolution_count):
                 return None  # pragma: no cover
             store = self._get_array_store(series, resolution)
-            with self._biofile.ensure_open():
+            with self._image_file.ensure_open():
                 return await store.get(chunk_key, prototype, byte_range)
         else:
             return None  # pragma: no cover
@@ -408,21 +408,21 @@ class BFOmeZarrStore(ReadOnlyStore):
         # Multiscales group (series group): check series index is valid
         series = cast("int", parsed.series)
         if parsed.level == PathLevel.MULTISCALES_GROUP:
-            return 0 <= series < len(self._biofile)
+            return 0 <= series < len(self._image_file)
 
         # Array metadata: check series and resolution are valid
         resolution = cast("int", parsed.resolution)
         if parsed.level == PathLevel.ARRAY_METADATA:
-            if not (0 <= series < len(self._biofile)):
+            if not (0 <= series < len(self._image_file)):
                 return False
-            meta = self._biofile.core_metadata(series=series)
+            meta = self._image_file.core_metadata(series=series)
             return 0 <= resolution < meta.resolution_count
 
         # Chunk: delegate to array store
         if parsed.level == PathLevel.CHUNK:
-            if not (0 <= series < len(self._biofile)):
+            if not (0 <= series < len(self._image_file)):
                 return False
-            meta = self._biofile.core_metadata(series=series)
+            meta = self._image_file.core_metadata(series=series)
             if not (0 <= resolution < meta.resolution_count):
                 return False
             store = self._get_array_store(series, resolution)
@@ -440,9 +440,9 @@ class BFOmeZarrStore(ReadOnlyStore):
         yield "OME/METADATA.ome.xml"
 
         # Enumerate all series and resolution levels
-        for series_idx in range(len(self._biofile)):
+        for series_idx in range(len(self._image_file)):
             yield f"{series_idx}/zarr.json"
-            meta = self._biofile.core_metadata(series=series_idx)
+            meta = self._image_file.core_metadata(series=series_idx)
             for res_idx in range(meta.resolution_count):
                 yield f"{series_idx}/{res_idx}/zarr.json"
                 store = self._get_array_store(series_idx, res_idx)
@@ -459,8 +459,8 @@ class BFOmeZarrStore(ReadOnlyStore):
 
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}({self._biofile.filename!r}, "
-            f"series_count={len(self._biofile)})"
+            f"{type(self).__name__}({self._image_file.filename!r}, "
+            f"series_count={len(self._image_file)})"
         )
 
     def save(self, dest: StoreLike) -> None:

@@ -17,16 +17,16 @@ if TYPE_CHECKING:
     from zarr.abc.store import ByteRequest
     from zarr.core.buffer import Buffer, BufferPrototype
 
-    from scyfio._biofile import BioFile
+    from scyfio._image_file import ImageFile
 
 
-class BFArrayStore(ReadOnlyStore):
+class ArrayStore(ReadOnlyStore):
     """Read-only zarr v3 store that virtualizes a SCIFIO series/resolution.
 
     Parameters
     ----------
-    biofile : BioFile
-        BioFile instance to read from. Caller manages the lifecycle.
+    biofile : ImageFile
+        ImageFile instance to read from. Caller manages the lifecycle.
     series : int
         Series index to virtualize
     resolution : int, optional
@@ -44,23 +44,23 @@ class BFArrayStore(ReadOnlyStore):
 
     Examples
     --------
-    Via LazyBioArray convenience method:
+    Via LazyImageArray convenience method:
 
-    >>> with BioFile("image.nd2") as bf:
+    >>> with ImageFile("image.nd2") as bf:
     ...     store = bf.as_array().to_zarr_store()
     ...     arr = zarr.open(store, mode="r")
     ...     data = arr[0, 0, 0]
 
     Direct construction:
 
-    >>> with BioFile("image.nd2") as bf:
-    ...     store = BFArrayStore(bf, series=0, resolution=0)
+    >>> with ImageFile("image.nd2") as bf:
+    ...     store = ArrayStore(bf, series=0, resolution=0)
     ...     arr = zarr.open(store, mode="r")
     """
 
     def __init__(
         self,
-        biofile: BioFile,
+        biofile: ImageFile,
         series: int,
         resolution: int = 0,
         /,
@@ -70,7 +70,7 @@ class BFArrayStore(ReadOnlyStore):
         squeeze_singletons: bool = False,
     ) -> None:
         super().__init__(read_only=True)
-        self._biofile = biofile
+        self._image_file = biofile
         self._series = series
         self._resolution = resolution
         self._meta = biofile.core_metadata(series, resolution)
@@ -252,7 +252,7 @@ class BFArrayStore(ReadOnlyStore):
             y_start, y_stop = 0, shape.y
             x_start, x_stop = 0, shape.x
 
-        plane = self._biofile.read_plane(
+        plane = self._image_file.read_plane(
             t=t,
             c=c_base,
             z=z,
@@ -290,7 +290,7 @@ class BFArrayStore(ReadOnlyStore):
         if not isinstance(value, type(self)):
             return NotImplemented  # pragma: no cover
         return (
-            self._biofile.filename == value._biofile.filename
+            self._image_file.filename == value._image_file.filename
             and self._series == value._series
             and self._resolution == value._resolution
             and self._tile_size == value._tile_size
@@ -305,7 +305,7 @@ class BFArrayStore(ReadOnlyStore):
         if key == "zarr.json":
             data = self._array_metadata()
         elif (coords := self._parse_chunk_key(key)) is not None:
-            with self._biofile.ensure_open():
+            with self._image_file.ensure_open():
                 data = self._read_chunk(coords)
         else:
             return None
@@ -323,11 +323,11 @@ class BFArrayStore(ReadOnlyStore):
             yield key
 
     def close(self) -> None:
-        """Close the store (and owned BioFile, if any)."""
+        """Close the store (and owned ImageFile, if any)."""
         self._is_open = False  # pragma: no cover
 
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}({self._biofile.filename!r}, "
+            f"{type(self).__name__}({self._image_file.filename!r}, "
             f"series={self._series}, shape={self._effective_shape})"
         )

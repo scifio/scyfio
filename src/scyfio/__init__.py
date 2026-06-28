@@ -7,16 +7,16 @@ try:
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "uninstalled"
 
-from ._biofile import BioFile
 from ._core_metadata import CoreMetadata, OMEShape
+from ._image_file import ImageFile
 from ._imread import imread, open_ome_zarr_group, open_zarr_array
-from ._lazy_array import LazyBioArray
+from ._lazy_array import LazyImageArray
 from ._series import Series
 
 __all__ = [
-    "BioFile",
     "CoreMetadata",
-    "LazyBioArray",
+    "ImageFile",
+    "LazyImageArray",
     "OMEShape",
     "Series",
     "imread",

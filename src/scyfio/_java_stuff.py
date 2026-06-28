@@ -26,22 +26,22 @@ FORMATS_GPL_COORDINATE = "ome:formats-gpl:6.10.1"
 MAVEN_COORDINATE = SCIFIO_BF_COMPAT_COORDINATE
 
 # Configure Java constraints from environment variables
-# BFF_JAVA_VENDOR: Java vendor (e.g., "zulu-jre", "adoptium", "temurin")
-# BFF_JAVA_VERSION: Java version (e.g., "11", "17", "21")
-# BFF_JAVA_FETCH: Fetch mode ("always", "never", "auto", default is "always")
-_bff_vendor = os.getenv("BFF_JAVA_VENDOR") or None
-_bff_version = os.getenv("BFF_JAVA_VERSION") or None
-_bff_fetch = os.getenv("BFF_JAVA_FETCH") or None
-if _bff_vendor or _bff_version:
+# SCYFIO_JAVA_VENDOR: Java vendor (e.g., "zulu-jre", "adoptium", "temurin")
+# SCYFIO_JAVA_VERSION: Java version (e.g., "11", "17", "21")
+# SCYFIO_JAVA_FETCH: Fetch mode ("always", "never", "auto", default is "always")
+_scyfio_vendor = os.getenv("SCYFIO_JAVA_VENDOR") or None
+_scyfio_version = os.getenv("SCYFIO_JAVA_VERSION") or None
+_scyfio_fetch = os.getenv("SCYFIO_JAVA_FETCH") or None
+if _scyfio_vendor or _scyfio_version:
     _kwargs = {}
-    if _bff_vendor:
-        _kwargs["vendor"] = _bff_vendor
-    if _bff_version:
-        _kwargs["version"] = _bff_version
+    if _scyfio_vendor:
+        _kwargs["vendor"] = _scyfio_vendor
+    if _scyfio_version:
+        _kwargs["version"] = _scyfio_version
     # Control fetch behavior via environment variable
     # Default: don't force download unless explicitly requested
-    if _bff_fetch:
-        _kwargs["fetch"] = _bff_fetch
+    if _scyfio_fetch:
+        _kwargs["fetch"] = _scyfio_fetch
     scyjava.config.set_java_constraints(**_kwargs)
 
 

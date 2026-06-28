@@ -28,7 +28,7 @@ from pathlib import Path
 
 import ndv  # pyright: ignore[reportMissingImports]
 
-from scyfio import BioFile, imread
+from scyfio import ImageFile, imread
 
 
 def main() -> None:
@@ -81,7 +81,7 @@ def main() -> None:
 
     else:
         # Open the file with scyfio
-        with BioFile(args.file_path) as bf:
+        with ImageFile(args.file_path) as bf:
             if args.xarray:
                 data = bf.to_xarray(series=args.series, resolution=args.res)
             elif args.dask:

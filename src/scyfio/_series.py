@@ -9,29 +9,29 @@ if TYPE_CHECKING:
     import numpy as np
     import xarray
 
-    from scyfio._biofile import BioFile
-    from scyfio._lazy_array import LazyBioArray
-    from scyfio._zarr._array_store import BFArrayStore
+    from scyfio._image_file import ImageFile
+    from scyfio._lazy_array import LazyImageArray
+    from scyfio._zarr._array_store import ArrayStore
 
 
 class Series:
-    """Proxy for a single series within a [`BioFile`][scyfio.BioFile].
+    """Proxy for a single series within a [`ImageFile`][scyfio.ImageFile].
 
     Provides convenient access to metadata and data for one series without
     needing to pass ``series=`` to every method call.
 
     Parameters
     ----------
-    biofile : BioFile
-        Open BioFile instance this series belongs to.
+    biofile : ImageFile
+        Open ImageFile instance this series belongs to.
     index : int
         Zero-based series index.
     """
 
-    __slots__ = ("_biofile", "_dtype", "_index", "_is_rgb", "_series_meta", "_shape")
+    __slots__ = ("_dtype", "_image_file", "_index", "_is_rgb", "_series_meta", "_shape")
 
-    def __init__(self, biofile: BioFile, index: int) -> None:
-        self._biofile = biofile
+    def __init__(self, biofile: ImageFile, index: int) -> None:
+        self._image_file = biofile
         self._index = index
         self._series_meta = biofile.core_metadata(index)
 
@@ -73,9 +73,9 @@ class Series:
         resolution : int, optional
             Resolution level (0 = full resolution), by default 0.
         """
-        return self._biofile.core_metadata(self._index, resolution)
+        return self._image_file.core_metadata(self._index, resolution)
 
-    def as_array(self, resolution: int = 0) -> LazyBioArray:
+    def as_array(self, resolution: int = 0) -> LazyImageArray:
         """Return a lazy array for this series.
 
         Parameters
@@ -83,7 +83,7 @@ class Series:
         resolution : int, optional
             Resolution level (0 = full resolution), by default 0.
         """
-        return self._biofile.as_array(self._index, resolution)
+        return self._image_file.as_array(self._index, resolution)
 
     def to_dask(
         self,
@@ -119,7 +119,7 @@ class Series:
 
     def to_zarr_store(
         self, resolution: int = 0, *, tile_size: tuple[int, int] | None = None
-    ) -> BFArrayStore:
+    ) -> ArrayStore:
         """Create a Zarr store for this series.
 
         Parameters
@@ -156,7 +156,7 @@ class Series:
             Thumbnail image as numpy array with shape (H, W) for grayscale or
             (H, W, RGB) for RGB images. Maximum dimension is 128 pixels.
         """
-        return self._biofile.get_thumbnail(series=self._index, t=t, c=c, z=z)
+        return self._image_file.get_thumbnail(series=self._index, t=t, c=c, z=z)
 
     def read_plane(
         self,
@@ -188,7 +188,7 @@ class Series:
         buffer : np.ndarray, optional
             Pre-allocated buffer for reuse.
         """
-        return self._biofile.read_plane(
+        return self._image_file.read_plane(
             t=t,
             c=c,
             z=z,
@@ -211,10 +211,10 @@ class Series:
             If True, only return files that do not contain pixel data (e.g., metadata,
             companion files, etc...), by default `False`.
         """
-        from scyfio._biofile import _bf_underlying_reader
+        from scyfio._image_file import _bf_underlying_reader
 
-        self._biofile._ensure_java_reader()
-        bf_reader = _bf_underlying_reader(self._biofile._java_metadata)
+        self._image_file._ensure_java_reader()
+        bf_reader = _bf_underlying_reader(self._image_file._java_metadata)
         if bf_reader is not None:
             try:
                 bf_reader.setSeries(self._index)
@@ -223,4 +223,4 @@ class Series:
                 ]
             except Exception:
                 pass
-        return self._biofile.used_files(metadata_only=metadata_only)
+        return self._image_file.used_files(metadata_only=metadata_only)
