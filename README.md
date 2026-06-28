@@ -9,9 +9,11 @@
 Modern SCIFIO-based scientific image reader for Python
 
 `scyfio` wraps the [SCIFIO](https://scif.io) Java library. SCIFIO reads many
-formats natively and reaches Bio-Formats' full format coverage through
+formats natively and reaches Bio-Formats's full format coverage through
 [`scifio-bf-compat`](https://github.com/scifio/scifio-bf-compat), which adapts
 every Bio-Formats reader into a SCIFIO format.
+
+Fork of [bffile](https://github.com/tlambert03/bffile).
 
 ### Documentation 📖
 
